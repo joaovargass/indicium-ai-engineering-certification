@@ -35,6 +35,7 @@ dependencies = [
   "faiss-cpu>=1.12",
   "rank-bm25==0.2.2",
   "pydantic>=2",
+  "pyspark >= 3.4",
   "python-dotenv",
   "tiktoken",
   "weasyprint",
