@@ -1,0 +1,192 @@
+# *********************************************
+# * Build System
+# *********************************************
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# *********************************************
+# * Project Metadata
+# *********************************************
+[project]
+name = "srag-report"
+version = "0.1.0"
+description = "PoC that generates SRAG situation reports with metrics, charts, and RAG-grounded narrative."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "João Vitor Vargas Soares" },
+]
+
+# *********************************************
+# * Runtime Dependencies
+# *********************************************
+# These mirror your requirements.txt, minus test/lint tools.
+dependencies = [
+  "openai>=1.0,<2",
+  "langchain>=1.0,<1.1",
+  "langgraph>=1.0,<1.1",
+  "langchain-openai>=1.0,<1.1",
+  "streamlit>=1.30",
+  "duckdb>=1.0",
+  "pandas>=2.2",
+  "numpy>=1.26",
+  "matplotlib>=3.9",
+  "faiss-cpu>=1.12",
+  "rank-bm25==0.2.2",
+  "pydantic>=2",
+  "python-dotenv",
+  "tiktoken",
+  "weasyprint",
+  "requests",
+  "markdown",
+  "jinja2",
+  "pyarrow",
+  "tavily-python",
+  "tenacity",
+  "pyyaml",
+  "beautifulsoup4",
+  "dateparser",
+]
+
+# *********************************************
+# * Optional Dependency Groups
+# *********************************************
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff",
+  "pylint",
+]
+
+# *********************************************
+# * Setuptools (src/ layout)
+# *********************************************
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# *********************************************
+# * Ruff Configuration
+# *********************************************
+[tool.ruff]
+# Black-compatible line length
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+# Broad but sane ruleset, similar style to your example
+extend-select = [
+  "A",    # builtins
+  "B",    # bugbear
+  "C90",  # complexity
+  "E",    # pycodestyle errors
+  "F",    # pyflakes
+  "I",    # import sorting
+  "N",    # pep8-naming
+  "NPY",  # NumPy-specific rules
+  "W",    # pycodestyle warnings
+  "D",    # docstring rules
+  "ANN",  # type annotation rules
+]
+
+# Ignore rules that clash with Black or are too noisy for this PoC
+ignore = [
+  "E203",  # whitespace before ':'
+  "E501",  # line length (Black handles wrapping / you decide)
+  "E712",
+  "D100",
+  "D203",
+  "D212",
+  "D300",
+  "D407",
+  "D206",
+  "N812",
+  "N802",
+  "N999",
+  "F821",
+  "F405",
+  "W191",
+  "E114",
+  "Q000",
+  "Q001",
+  "Q002",
+  "Q003",
+  "COM812",
+  "COM819",
+  "ISC002",
+]
+
+exclude = [
+  ".git",
+  "__pycache__",
+  "build",
+  "dist",
+  ".pytest_cache",
+  "*.ipynb",
+  "venv",
+  ".venv",
+  "__pypackages__",
+  "node_modules",
+  "site-packages",
+  "data",
+  "reports",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "E402", "F405", "F821", "D104"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# *********************************************
+# * Pylint Configuration
+# *********************************************
+# Same structure as your example (MASTER / MESSAGES CONTROL),
+# but without Databricks-specific plugins or checks.
+
+[tool.pylint."MASTER"]
+# Folders to ignore during lint
+ignore = [
+  "venv",
+  ".venv",
+  "build",
+  "dist",
+  "data",
+  "reports",
+]
+jobs = 0
+py-version = "3.11"
+
+[tool.pylint."MESSAGES CONTROL"]
+# Start from defaults and just disable noisy stuff
+disable = [
+  "C0114",  # missing-module-docstring
+  "C0115",  # missing-class-docstring
+  "C0116",  # missing-function-docstring
+  "R0903",  # too-few-public-methods
+]
+
+[tool.pylint."FORMAT"]
+max-line-length = 88
+
+[tool.pylint."BASIC"]
+good-names = [
+  "i",
+  "j",
+  "k",
+  "df",
+]
+
+# *********************************************
+# * Pytest Configuration
+# *********************************************
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+
