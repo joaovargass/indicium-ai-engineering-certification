@@ -14,3 +14,14 @@ python-dotenv
 tiktoken
 weasyprint
 requests
+markdown
+jinja2
+pyarrow
+pytest
+tavily-python
+tenacity
+pyyaml
+beautifulsoup4
+dateparser
+ruff
+pylint
