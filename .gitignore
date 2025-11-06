@@ -205,3 +205,21 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# data folders: ignore everything, except .gitkeep in ANY subfolder
+/data/**
+!/data/**/.gitkeep
+
+# reports/artifacts: same rule
+/reports/**
+!/reports/**/.gitkeep
+
+# local DB
+*.duckdb
+
+# environment / temp files
+.venv/
+__pycache__/
+.DS_Store
+*.pyc
+.env
