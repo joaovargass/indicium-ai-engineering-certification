@@ -48,6 +48,9 @@ dependencies = [
   "pyyaml",
   "beautifulsoup4",
   "dateparser",
+  "ipykernel",
+  "ipywidgets",
+  "notebook",
 ]
 
 # *********************************************
