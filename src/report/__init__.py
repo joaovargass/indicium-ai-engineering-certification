@@ -19,4 +19,3 @@ __all__ = [
     "save_report_to_file",
     "validate_report_request",
 ]
-

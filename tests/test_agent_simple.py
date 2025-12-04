@@ -2,14 +2,14 @@
 Simple test script for SRAG agent - Quick start guide.
 
 Run this from project root:
-    uv run python test_agent_simple.py
+    uv run python tests/test_agent_simple.py
 """
 
 import sys
 from pathlib import Path
 
 # Add src to path
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_PATH = PROJECT_ROOT / "src"
 sys.path.insert(0, str(SRC_PATH))
 

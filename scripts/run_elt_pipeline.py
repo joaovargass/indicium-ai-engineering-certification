@@ -1,4 +1,4 @@
-"""Main EDA pipeline with incremental processing."""
+"""Main ELT pipeline with incremental processing."""
 
 import sys
 from pathlib import Path

@@ -1,6 +1,5 @@
 """Report generation tools for SRAG situation reports."""
 
-from pathlib import Path
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
@@ -54,8 +53,6 @@ def _fetch_news(
         return []
 
 
-
-
 @tool
 def generate_download_report(
     uf: Annotated[str | None, "State code. None for national."] = None,
@@ -83,6 +80,7 @@ def generate_download_report(
         - report_content: Markdown string
         - file_path: Path to saved file (as string)
         - file_size: File size in bytes
+
     """
     # Validate request
     is_valid, error_msg = validate_report_request(days, months, max_news)
@@ -113,11 +111,9 @@ def generate_download_report(
     charts_section = ""
     if include_charts:
         # Generate chart JSONs for reference (can be used to render charts)
-        daily_chart_json = get_daily_chart_json.invoke({"uf": uf, "days": days})
-        monthly_chart_json = get_monthly_chart_json.invoke(
-            {"uf": uf, "months": months}
-        )
-        
+        get_daily_chart_json.invoke({"uf": uf, "days": days})
+        get_monthly_chart_json.invoke({"uf": uf, "months": months})
+
         charts_section = f"""**Gráfico 1:** Número diário de casos dos últimos {days} dias
 **Gráfico 2:** Número mensal de casos dos últimos {months} meses
 
@@ -180,6 +176,7 @@ def generate_chat_report(
         - monthly_chart_json: Plotly JSON for monthly chart
         - metrics: All metrics data
         - news: News articles
+
     """
     # Validate request
     is_valid, error_msg = validate_report_request(days, months, max_news)

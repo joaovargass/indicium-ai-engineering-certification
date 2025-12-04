@@ -1,4 +1,5 @@
-"""Report templating and LLM-based text generation for SRAG reports.
+"""
+Report templating and LLM-based text generation for SRAG reports.
 
 This module provides:
 - Jinja2 templates for report structure
@@ -41,6 +42,7 @@ def validate_report_request(
 
     Returns:
         Tuple of (is_valid, error_message)
+
     """
     if days < 7 or days > 90:
         return False, "Days must be between 7 and 90"
@@ -69,6 +71,7 @@ def generate_executive_summary(
 
     Returns:
         LLM-generated executive summary text
+
     """
     # Prepare context for LLM
     case_rate = metrics.get("case_increase", {}).get("rate")
@@ -94,7 +97,9 @@ Dados para {location}:
     if news:
         prompt += "Notícias relevantes:\n"
         for article in news[:3]:  # Use max 3 for context
-            prompt += f"- {article.get('title', '')}: {article.get('content', '')[:150]}...\n"
+            prompt += (
+                f"- {article.get('title', '')}: {article.get('content', '')[:150]}...\n"
+            )
         prompt += "\n"
 
     prompt += """Instruções:
@@ -111,14 +116,14 @@ Resumo Executivo:"""
         llm = _get_llm()
         response = llm.invoke(prompt)
         return response.content.strip()
-    except Exception as e:
+    except Exception:
         # Fallback if LLM fails
         return f"Análise consolidada dos dados SRAG para {location}. Os dados indicam uma situação que requer monitoramento contínuo."
 
 
 def generate_metric_explanation(
     metric_name: str,
-    metric_value: Any,
+    metric_value: int | float | str | None,
     metric_data: dict[str, Any],
     news: list[dict],
 ) -> str:
@@ -133,6 +138,7 @@ def generate_metric_explanation(
 
     Returns:
         LLM-generated explanation text (1-2 sentences)
+
     """
     # Map metric names to Portuguese
     metric_names_pt = {
@@ -150,7 +156,9 @@ def generate_metric_explanation(
 
     # Add relevant details based on metric type
     if metric_name == "case_increase_rate":
-        context += f"Casos no período atual: {metric_data.get('current_period_cases', 0)}\n"
+        context += (
+            f"Casos no período atual: {metric_data.get('current_period_cases', 0)}\n"
+        )
         context += f"Casos no período anterior: {metric_data.get('previous_period_cases', 0)}\n"
     elif metric_name == "mortality_rate":
         context += f"Total de óbitos: {metric_data.get('total_deaths', 0)}\n"
@@ -168,7 +176,7 @@ def generate_metric_explanation(
         for article in news[:2]:
             context += f"- {article.get('title', '')}\n"
 
-    prompt = f"""Você é um analista de dados de saúde. 
+    prompt = f"""Você é um analista de dados de saúde.
 
 Com base nos dados abaixo, gere uma explicação contextualizada curta (1-2 frases) em português que explique o que este valor significa no cenário atual.
 
@@ -200,6 +208,7 @@ def format_metrics_table(metrics: dict[str, Any], news: list[dict]) -> str:
 
     Returns:
         Markdown table string
+
     """
     rows = []
 
@@ -209,11 +218,13 @@ def format_metrics_table(metrics: dict[str, Any], news: list[dict]) -> str:
     case_explanation = generate_metric_explanation(
         "case_increase_rate", case_rate, case_data, news
     )
-    rows.append({
-        "metric": "Taxa de Aumento de Casos",
-        "value": f"{case_rate}%" if case_rate is not None else "N/A",
-        "explanation": case_explanation,
-    })
+    rows.append(
+        {
+            "metric": "Taxa de Aumento de Casos",
+            "value": f"{case_rate}%" if case_rate is not None else "N/A",
+            "explanation": case_explanation,
+        }
+    )
 
     # Mortality rate
     mortality_data = metrics.get("mortality", {})
@@ -221,11 +232,13 @@ def format_metrics_table(metrics: dict[str, Any], news: list[dict]) -> str:
     mortality_explanation = generate_metric_explanation(
         "mortality_rate", mortality_rate, mortality_data, news
     )
-    rows.append({
-        "metric": "Taxa de Mortalidade",
-        "value": f"{mortality_rate}%" if mortality_rate is not None else "N/A",
-        "explanation": mortality_explanation,
-    })
+    rows.append(
+        {
+            "metric": "Taxa de Mortalidade",
+            "value": f"{mortality_rate}%" if mortality_rate is not None else "N/A",
+            "explanation": mortality_explanation,
+        }
+    )
 
     # ICU occupancy
     icu_data = metrics.get("icu_occupancy", {})
@@ -233,11 +246,13 @@ def format_metrics_table(metrics: dict[str, Any], news: list[dict]) -> str:
     icu_explanation = generate_metric_explanation(
         "icu_occupancy_rate", icu_rate, icu_data, news
     )
-    rows.append({
-        "metric": "Taxa de Ocupação de UTI",
-        "value": f"{icu_rate}%" if icu_rate is not None else "N/A",
-        "explanation": icu_explanation,
-    })
+    rows.append(
+        {
+            "metric": "Taxa de Ocupação de UTI",
+            "value": f"{icu_rate}%" if icu_rate is not None else "N/A",
+            "explanation": icu_explanation,
+        }
+    )
 
     # Vaccination
     vax_data = metrics.get("vaccination", {})
@@ -249,13 +264,15 @@ def format_metrics_table(metrics: dict[str, Any], news: list[dict]) -> str:
         vax_data,
         news,
     )
-    rows.append({
-        "metric": "Taxas de Vacinação",
-        "value": f"COVID-19: {covid_vax}%, Gripe: {flu_vax}%"
-        if covid_vax is not None and flu_vax is not None
-        else "N/A",
-        "explanation": vax_explanation,
-    })
+    rows.append(
+        {
+            "metric": "Taxas de Vacinação",
+            "value": f"COVID-19: {covid_vax}%, Gripe: {flu_vax}%"
+            if covid_vax is not None and flu_vax is not None
+            else "N/A",
+            "explanation": vax_explanation,
+        }
+    )
 
     # Build table
     table_lines = [
@@ -268,9 +285,7 @@ def format_metrics_table(metrics: dict[str, Any], news: list[dict]) -> str:
         explanation = row["explanation"]
         if len(explanation) > 100:
             explanation = explanation[:97] + "..."
-        table_lines.append(
-            f"| {row['metric']} | {row['value']} | {explanation} |"
-        )
+        table_lines.append(f"| {row['metric']} | {row['value']} | {explanation} |")
 
     return "\n".join(table_lines)
 
@@ -285,6 +300,7 @@ def format_news_section(articles: list[dict], detailed: bool = True) -> str:
 
     Returns:
         Markdown formatted news section
+
     """
     if not articles:
         return ""
@@ -337,6 +353,7 @@ def render_report_template(
 
     Returns:
         Complete report as Markdown string
+
     """
     template_str = """# Relatório SRAG — {{ location }}
 **Gerado em:** {{ generation_date }}
@@ -401,6 +418,7 @@ def save_report_to_file(
 
     Returns:
         Path to saved file
+
     """
     if output_dir is None:
         # Default to reports/ directory in project root
@@ -421,4 +439,3 @@ def save_report_to_file(
         f.write(report_content)
 
     return file_path
-
