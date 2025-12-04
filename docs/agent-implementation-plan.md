@@ -10,18 +10,18 @@
 
 ## 📊 Progress Tracker
 
-### Overall Status: 🟡 In Progress
+### Overall Status: 🟢 Nearly Complete
 
-**Last Updated:** December 4, 2025
+**Last Updated:** December 5, 2025
 
 ### Phase Completion
 
 | Phase | Status | Progress | Notes |
 |-------|--------|----------|-------|
 | **Phase 1: Core Infrastructure** | ✅ Complete | 100% | News fetcher + Tool wrappers + ICU beds |
-| **Phase 2: Agent Orchestration** | ⬜ Not Started | 0% | Prompts + LangGraph graph |
-| **Phase 3: Reporting** | ⬜ Not Started | 0% | Markdown templates |
-| **Phase 4: Integration & Testing** | ⬜ Not Started | 0% | CLI + Tests + Documentation |
+| **Phase 2: Agent Orchestration** | ✅ Complete | 100% | Prompts + LangGraph graph fully implemented |
+| **Phase 3: Reporting** | ✅ Complete | 100% | Report generation with LLM-based templater fully implemented |
+| **Phase 4: Integration & Testing** | 🟡 In Progress | 75% | Tests complete, app.py not integrated, README not updated |
 
 ### Code Deliverables Status
 
@@ -34,12 +34,13 @@
 | `src/tools/charts.py` | ✅ Complete | Phase 1 | Chart tools |
 | `src/tools/metrics.py` | ✅ Complete | Phase 1 | Metric tools |
 | `src/tools/news.py` | ✅ Complete | Phase 1 | News search tool |
-| `src/tools/reports.py` | ✅ Complete | Phase 1 | Report generation tools |
+| `src/tools/reports.py` | ✅ Complete | Phase 1 | Report generation tools (both download & chat) |
 | `src/tools/location_utils.py` | ✅ Complete | Phase 1 | Location filter utilities |
-| `src/agent/prompts.py` | ⬜ Not Started | Phase 2 | System prompt |
-| `src/agent/graph.py` | ⬜ Not Started | Phase 2 | LangGraph StateGraph |
-| `src/report/templater.py` | ⬜ Not Started | Phase 3 | Report generator |
-| `app.py` | ⬜ Not Started | Phase 4 | CLI entry point |
+| `src/agent/prompts.py` | ✅ Complete | Phase 2 | System prompt (153 lines, full implementation) |
+| `src/agent/graph.py` | ✅ Complete | Phase 2 | LangGraph StateGraph (291 lines, fully functional) |
+| `src/agent/__init__.py` | ✅ Complete | Phase 2 | Agent module exports |
+| `src/report/templater.py` | ✅ Complete | Phase 3 | Full implementation (425 lines): LLM integration, Jinja2 templates, validation, download |
+| `app.py` | ⬜ Not Integrated | Phase 4 | Only Dash app launcher, no agent chat UI integration |
 
 ### Documentation Deliverables Status
 
@@ -53,9 +54,11 @@
 
 | Artifact | Status | Notes |
 |----------|--------|-------|
-| Unit Tests | ⬜ Not Started | Tests for news_fetcher, tools, graph |
-| Integration Tests | ⬜ Not Started | Full conversation flow tests |
-| Guardrail Tests | ⬜ Not Started | Adversarial input handling |
+| Unit Tests | ✅ Complete | Comprehensive tests: test_agent.py, test_reports.py, test_report_templater.py |
+| Integration Tests | ✅ Complete | Full conversation flow tests in tests/test_agent.py |
+| Guardrail Tests | ✅ Complete | Medical advice refusal tests in test_agent.py |
+| Report Tests | ✅ Complete | Comprehensive tests in tests/test_reports.py (679 lines) |
+| Templater Tests | ✅ Complete | Full tests in tests/test_report_templater.py (461 lines) |
 
 ### Existing Components (Already Complete)
 
@@ -98,7 +101,8 @@
 14. [Implementation Roadmap](#14-implementation-roadmap)
 15. [Success Metrics](#15-success-metrics)
 16. [Deliverables](#16-deliverables)
-17. [References](#17-references)
+17. [Future Enhancements / Backlog](#17-future-enhancements--backlog)
+18. [References](#18-references)
 
 ---
 
@@ -1302,45 +1306,84 @@ After each code change:
 - All 9 tools properly wrapped with LangChain decorators
 - Data loading helper works with cache/DW fallback
 
-### 14.3 Phase 2: Agent Orchestration
+### 14.3 Phase 2: Agent Orchestration ✅ COMPLETE
 
 **Objective:** Build the reasoning brain of the system.
 
-| Task | File | Description | Dependencies |
-|------|------|-------------|--------------|
-| 2.1 | `src/agent/prompts.py` | System prompt with all guidelines | None |
-| 2.2 | `src/agent/graph.py` | LangGraph StateGraph with nodes and edges | prompts.py, tools.py |
+| Task | File | Description | Status |
+|------|------|-------------|--------|
+| 2.1 | `src/agent/prompts.py` | System prompt with all guidelines | ✅ Complete |
+| 2.2 | `src/agent/graph.py` | LangGraph StateGraph with nodes and edges | ✅ Complete |
+| 2.3 | `src/agent/__init__.py` | Agent module exports | ✅ Complete |
 
-**Validation Checkpoint:**
+**Validation Checkpoint:** ✅
 - Graph compiles without errors
-- Agent responds to test message (may be simple without full tool integration)
+- Agent responds to test messages with full tool integration
+- `invoke_agent()` function works for simple and complex queries
+- Conversation continuity (thread_id) working
+- All 9 tools properly bound and callable
 
-### 14.4 Phase 3: Reporting
+### 14.4 Phase 3: Reporting ✅ COMPLETE
 
-**Objective:** Enable structured output generation.
+**Objective:** Enable structured output generation with LLM-generated contextualized explanations.
 
-| Task | File | Description | Dependencies |
-|------|------|-------------|--------------|
-| 3.1 | `src/report/templater.py` | Jinja2 template functions | None |
+| Task | File | Description | Status |
+|------|------|-------------|--------|
+| 3.1 | `src/report/templater.py` | Jinja2 templates + LLM text generation | ✅ Complete |
+| 3.2 | `src/tools/reports.py` | Report generation with validation & download | ✅ Complete |
 
-**Validation Checkpoint:**
-- Template renders with mock data
-- Markdown output is valid
+**Key Requirements:**
+- **LLM-Generated Explanations:** All written text (executive summary, metric explanations) must be generated by LLM based on metrics + news, NOT pre-made templates
+- **Download Functionality:** Reports must be saveable to file for user download
+- **User Customization:** Users can choose what sections to include
+- **Validation:** Prevent information overload (max 5 news articles, reasonable time periods)
+- **Simple & Beautiful:** Clean formatting with professional tables, proper spacing
 
-### 14.5 Phase 4: Integration & Testing
+**Implementation Details:**
+1. `templater.py` (425 lines) includes:
+   - ✅ Jinja2 templates for report structure (sections, formatting)
+   - ✅ LLM integration for generating contextualized explanations (`generate_executive_summary`, `generate_metric_explanation`)
+   - ✅ Validation functions (`validate_report_request`)
+   - ✅ Download functionality (`save_report_to_file`)
+   - ✅ Metrics table formatting with LLM explanations (`format_metrics_table`)
+   - ✅ News section formatting (`format_news_section`)
+   - ✅ Template rendering (`render_report_template`)
+2. `reports.py` (240 lines) includes:
+   - ✅ Uses templates for structure
+   - ✅ Calls LLM for text generation (explanations, executive summary)
+   - ✅ Validation before generation
+   - ✅ Saves reports to files
+   - ✅ Both `generate_download_report` and `generate_chat_report` tools implemented
+
+**Validation Checkpoint:** ✅ Complete
+- ✅ Templates created with modular structure
+- ✅ LLM integration for text generation
+- ✅ Validation functions implemented
+- ✅ Download functionality working
+- ✅ User customization options available (include_executive_summary, include_metrics, include_charts, include_news)
+
+### 14.5 Phase 4: Integration & Testing 🟡 IN PROGRESS
 
 **Objective:** End-to-end system validation.
 
-| Task | File | Description | Dependencies |
-|------|------|-------------|--------------|
-| 4.1 | `app.py` | CLI entry point for agent | graph.py |
-| 4.2 | `tests/` | Unit and integration tests | All modules |
-| 4.3 | `README.md` | Usage documentation | All phases complete |
+| Task | File | Description | Status |
+|------|------|-------------|--------|
+| 4.1 | `app.py` | CLI entry point for agent | ⬜ Not integrated (only Dash app launcher) |
+| 4.2 | `tests/test_agent.py` | Integration and guardrail tests | ✅ Complete (267 lines) |
+| 4.3 | `tests/test_reports.py` | Report generation tests | ✅ Complete (679 lines) |
+| 4.4 | `tests/test_report_templater.py` | Templater module tests | ✅ Complete (461 lines) |
+| 4.5 | `README.md` | Usage documentation | ⬜ Not updated |
+| 4.6 | Architecture Diagram (PDF) | Required for certification | ⬜ Not created |
 
-**Validation Checkpoint:**
-- Full conversation flow works via CLI
-- All tests pass
-- Documentation complete
+**Validation Checkpoint:** 🟡 Partial
+- ✅ Full conversation flow works via `invoke_agent()` function
+- ✅ Integration tests pass (test_agent.py)
+- ✅ Guardrail tests pass (medical advice refusal)
+- ✅ Comprehensive report tests (test_reports.py)
+- ✅ Comprehensive templater tests (test_report_templater.py)
+- ⬜ No Dash chat UI integration
+- ⬜ Documentation incomplete
+- ⬜ Architecture diagram missing
 
 ### 14.6 Dependency Graph
 
@@ -1416,10 +1459,12 @@ After each code change:
 | `src/tools/` | ✅ Complete | LangChain tool wrappers (9 tools) |
 | `src/metrics/calculators.py` | ✅ Complete | Metric calculation functions |
 | `src/elt/load.py` | ✅ Complete | Data loading (includes `load_srag_data`) |
-| `src/agent/prompts.py` | To Create | System prompt |
-| `src/agent/graph.py` | To Create | LangGraph StateGraph |
-| `src/report/templater.py` | To Create | Report generator (Markdown templates) |
-| `app.py` | To Update | CLI entry point |
+| `src/agent/prompts.py` | ✅ Complete | System prompt (153 lines, fully implemented) |
+| `src/agent/graph.py` | ✅ Complete | LangGraph StateGraph (291 lines, fully functional) |
+| `src/agent/__init__.py` | ✅ Complete | Agent module exports |
+| `src/tools/reports.py` | ✅ Complete | Report generation (240 lines, both download & chat formats) |
+| `src/report/templater.py` | ✅ Complete | Full implementation (425 lines): LLM integration, templates, validation, download |
+| `app.py` | ⬜ Not Integrated | Only Dash app launcher, no agent chat UI |
 
 **Tools in `src/tools/` (9 total):**
 1. `get_case_increase_rate` - Individual metric tool
@@ -1436,23 +1481,204 @@ After each code change:
 
 | Document | Status | Description |
 |----------|--------|-------------|
-| `docs/agent-implementation-plan.md` | ✅ Complete | This document |
-| `README.md` | To Update | Setup and usage instructions |
-| Architecture Diagram (PDF) | To Create | Required for certification |
+| `docs/agent-implementation-plan.md` | ✅ Complete | This document (updated with current status) |
+| `README.md` | ⬜ Not Updated | Still minimal, needs setup and usage instructions |
+| Architecture Diagram (PDF) | ⬜ Not Created | Required for certification |
 
 ### 16.3 Testing Deliverables
 
-| Artifact | Description |
-|----------|-------------|
-| Unit Tests | Tests for news_fetcher, tools, graph |
-| Integration Tests | Full conversation flow tests |
-| Guardrail Tests | Adversarial input handling |
+| Artifact | Status | Description |
+|----------|--------|-------------|
+| Unit Tests | ✅ Complete | Comprehensive tests: test_agent.py (267 lines), test_reports.py (679 lines), test_report_templater.py (461 lines) |
+| Integration Tests | ✅ Complete | Full conversation flow tests in tests/test_agent.py |
+| Guardrail Tests | ✅ Complete | Medical advice refusal tests in test_agent.py |
 
 ---
 
-## 17. References
+## 17. Future Enhancements / Backlog
 
-### 17.1 Official Documentation
+> **Note:** These items are planned for post-completion implementation to enhance the agent's capabilities and performance.
+
+### 18.1 RAG-Enhanced News Interpretation
+
+**Objective:** Implement Retrieval-Augmented Generation (RAG) to improve news interpretation and enable broader, more contextual news search.
+
+**Current State:**
+- News search uses Tavily API with basic query enhancement
+- News articles are returned as-is without deeper interpretation
+- Limited ability to connect news context across multiple sources
+
+**Proposed Enhancement:**
+- **Vector Database Integration:** Use ChromaDB, Pinecone, or Weaviate to store and retrieve news embeddings
+- **RAG Pipeline:** 
+  - Ingest news articles into vector database with metadata (date, location, topic)
+  - Generate embeddings using sentence transformers or OpenAI embeddings
+  - Retrieve relevant news context when agent needs to explain trends
+  - Generate contextualized summaries combining multiple news sources
+- **Broader Search:** Enable semantic search across news corpus, not just keyword-based Tavily queries
+- **News Clustering:** Group related news articles to identify trending topics
+
+**Technical Approach:**
+- Use LangChain's RAG components (`VectorStoreRetriever`, `ContextualCompressionRetriever`)
+- Integrate with existing `search_srag_news_tool` to enhance results
+- Create new tool: `interpret_news_with_rag(query, max_sources=5)`
+- Store news embeddings in cloud vector database (Azure Cognitive Search, Pinecone, or local ChromaDB)
+
+**References:**
+- [Retrieval-Augmented Generation for News (GitHub)](https://github.com/dhivyeshrk/Retrieval-Augmented-Generation-for-news)
+- [LangChain RAG Documentation](https://python.langchain.com/docs/use_cases/question_answering/)
+
+---
+
+### 18.2 Asynchronous ELT Pipeline Execution
+
+**Objective:** Enable the agent to trigger data warehouse updates and cache validation without blocking user interactions. Pipeline stages should execute in parallel/background while the agent continues answering questions.
+
+**Current State:**
+- ELT pipeline runs synchronously (if triggered)
+- User must wait for pipeline completion
+- No mechanism to check cache currency or trigger updates from agent
+
+**Proposed Enhancement:**
+- **Agent Tool:** `trigger_elt_pipeline(force_refresh=False)` 
+  - Initiates ELT pipeline execution
+  - Returns immediately with job ID and status
+  - Agent can inform user: "Data update started. I'll continue with current data while it processes."
+- **Background Task Execution:**
+  - Use Python `asyncio` with task queues (Celery, RQ, or Azure Functions)
+  - Pipeline stages execute in parallel where possible
+  - Status checking tool: `check_pipeline_status(job_id)`
+- **Cache Validation:**
+  - Tool: `validate_cache_currency()` - checks if cached data matches DW
+  - Automatic cache refresh if stale
+  - Agent can inform user about data freshness
+- **Non-Blocking Architecture:**
+  - Agent continues answering questions using current cache
+  - Background pipeline updates cache when complete
+  - Next query uses fresh data automatically
+
+**Technical Approach:**
+- **Option 1: Celery + Redis/RabbitMQ**
+  - Celery workers execute ELT tasks
+  - Agent triggers tasks via Celery client
+  - Status tracked in Redis
+- **Option 2: Azure Functions/Logic Apps**
+  - Serverless functions for ELT stages
+  - Agent calls Azure Function HTTP endpoint
+  - Status via Azure Queue Storage or Cosmos DB
+- **Option 3: Apache Airflow**
+  - Orchestrate ELT as DAG
+  - Agent triggers DAG via Airflow API
+  - Status via Airflow API or database
+- **Option 4: LangGraph Background Tasks** (if supported)
+  - Use LangGraph's async capabilities
+  - Spawn background tasks from agent node
+  - Status via shared state/checkpointer
+
+**Implementation Steps:**
+1. Refactor ELT pipeline into async-compatible functions
+2. Create task queue infrastructure (Celery recommended for Python)
+3. Add agent tools: `trigger_elt_pipeline`, `check_pipeline_status`, `validate_cache_currency`
+4. Update agent prompt to explain async behavior to users
+5. Add pipeline status monitoring/notifications
+
+**References:**
+- [Apache Airflow ETL/ELT Solutions](https://www.astronomer.io/solutions/etl-elt/)
+- [Event-Driven Data Pipeline with Cloud Workflows](https://medium.com/google-cloud/event-driven-data-pipeline-with-cloud-workflows-and-serverless-spark-876d85d546d4)
+- [Celery Documentation](https://docs.celeryq.dev/)
+
+---
+
+### 18.3 Cloud-Based Spark ELT for Faster Updates
+
+**Objective:** Migrate ELT processes to Apache Spark in the cloud to significantly accelerate data updates, enabling faster agent queries and on-demand ELT execution.
+
+**Current State:**
+- ELT pipeline uses pandas/standard Python (single-threaded, local)
+- Data processing limited by local machine resources
+- Updates can be slow for large datasets
+
+**Proposed Enhancement:**
+- **Apache Spark Migration:**
+  - Rewrite ELT stages using PySpark
+  - Leverage distributed computing for parallel processing
+  - Process data in partitions for scalability
+- **Cloud Infrastructure:**
+  - **Azure Databricks** (recommended for Azure DW integration)
+    - Managed Spark clusters
+    - Direct integration with Azure Data Warehouse
+    - Auto-scaling based on workload
+    - Notebook-based development
+  - **Alternative: Azure Synapse Analytics**
+    - Serverless Spark pools
+    - Integrated with Azure DW
+    - Pay-per-use model
+- **Performance Improvements:**
+  - 10-100x faster data processing (depending on cluster size)
+  - Parallel extraction, transformation, and loading
+  - Incremental updates (only process new/changed data)
+- **Agent Integration:**
+  - Agent can trigger Spark jobs via API
+  - Status monitoring and job completion notifications
+  - Automatic cache refresh after Spark job completion
+
+**Technical Approach:**
+1. **Spark Cluster Setup:**
+   - Azure Databricks workspace
+   - Configure cluster with appropriate node types
+   - Set up Azure Data Warehouse connection
+2. **ELT Migration:**
+   - Convert `extract.py` to Spark DataFrame operations
+   - Convert `transform.py` to Spark transformations
+   - Convert `load.py` to Spark write operations (Parquet, Delta Lake)
+3. **Orchestration:**
+   - Use Databricks Jobs API or Azure Data Factory
+   - Schedule or trigger on-demand
+   - Monitor via Databricks UI or API
+4. **Agent Tools:**
+   - `trigger_spark_elt(force_refresh=False)` - Start Spark job
+   - `check_spark_job_status(job_id)` - Monitor progress
+   - `get_data_freshness()` - Check last update time
+
+**Benefits:**
+- **Speed:** Process large datasets in minutes instead of hours
+- **Scalability:** Auto-scale clusters based on data volume
+- **Cost:** Pay only for compute time used
+- **Reliability:** Managed infrastructure with automatic retries
+- **Integration:** Native Azure services integration
+
+**Migration Path:**
+1. Phase 1: Set up Databricks workspace and test Spark operations
+2. Phase 2: Migrate one ELT stage at a time (extract → transform → load)
+3. Phase 3: Optimize with partitioning, caching, and incremental updates
+4. Phase 4: Integrate with agent tools and async execution (see 18.2)
+
+**References:**
+- [Azure Databricks Documentation](https://learn.microsoft.com/en-us/azure/databricks/)
+- [Azure Data Engineering Tools](https://visualpathblogs.com/azure-data-engineering/top-tools-commonly-used-for-etl-elt-in-azure/)
+- [Apache Spark Structured Streaming](https://spark.apache.org/docs/latest/streaming/performance-tips.html)
+- [Databricks Data Intelligence Platform](https://www.databricks.com/product/data-intelligence-platform)
+
+---
+
+### 18.4 Backlog Priority Summary
+
+| Enhancement | Priority | Estimated Effort | Dependencies |
+|-------------|---------|------------------|--------------|
+| **RAG News Interpretation** | Medium | 2-3 weeks | Vector DB setup, embedding models |
+| **Async ELT Execution** | High | 3-4 weeks | Task queue infrastructure |
+| **Spark Cloud ELT** | High | 4-6 weeks | Azure Databricks setup, ELT migration |
+
+**Recommended Implementation Order:**
+1. **Async ELT Execution** (18.2) - Immediate UX improvement, enables faster iterations
+2. **Spark Cloud ELT** (18.3) - Major performance boost, foundation for scale
+3. **RAG News Interpretation** (18.1) - Enhanced intelligence, can be added incrementally
+
+---
+
+## 18. References
+
+### 18.1 Official Documentation
 
 - [LangGraph v1 Release Notes](https://docs.langchain.com/oss/python/releases/langgraph-v1) — Primary reference for graph construction
 - [LangChain v1 Release Notes](https://blog.langchain.com/langchain-langgraph-1dot0/) — Agent pattern reference
@@ -1460,12 +1686,12 @@ After each code change:
 - [OpenAI API Reference](https://platform.openai.com/docs/api-reference) — LLM integration
 - [Plotly Python Documentation](https://plotly.com/python/) — Chart generation
 
-### 17.2 Data Sources
+### 18.2 Data Sources
 
 - [Open DATASUS - SRAG Dataset](https://opendatasus.saude.gov.br/dataset/srag-2021-a-2024) — Primary data source
 - [SRAG Data Dictionary](../dicionario-de-dados-2019-a-2025.md) — Field definitions
 
-### 17.3 Project Documents
+### 18.3 Project Documents
 
 - [Challenge Description](../enunciado-desafio.md) — Original requirements
 - [Topics to Cover](../important-topics-to-cover.md) — AI Engineering concepts
@@ -1518,7 +1744,7 @@ Desafio/
 │   ├── metrics/
 │   │   └── calculators.py          # ✅ Metric calculation functions
 │   ├── report/
-│   │   └── templater.py            # Report generator (to create)
+│   │   └── templater.py            # ✅ Report generator (425 lines, fully implemented)
 │   ├── retrieval/
 │   │   ├── icu_beds.py             # ✅ CNES ICU bed data fetcher
 │   │   ├── indexer.py              # Placeholder (to create)
@@ -1538,6 +1764,7 @@ Desafio/
 
 ---
 
-*Document Version: 2.0*  
-*Last Updated: December 4, 2025*  
-*Prepared for: Indicium AI Engineering Certification*
+*Document Version: 2.1*  
+*Last Updated: December 5, 2025*  
+*Prepared for: Indicium AI Engineering Certification*  
+*Status: Updated with actual implementation analysis - Phase 3 now complete, comprehensive testing in place*

@@ -1,4 +1,5 @@
-"""Test file for all tools modules.
+"""
+Test file for all tools modules.
 
 This file will be deleted later - it's only for development testing.
 """
@@ -12,7 +13,6 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from agent.tools import get_tools
 from agent.tools.charts import get_daily_chart_json, get_monthly_chart_json
 from agent.tools.metrics import (
     get_case_increase_rate,
@@ -25,6 +25,8 @@ from agent.tools.reports import (
     generate_full_report_for_chat,
     generate_full_report_for_download,
 )
+
+from agent.tools import get_tools
 
 
 def test_helpers() -> None:
@@ -152,7 +154,9 @@ def test_news_tool() -> None:
     print("=" * 60)
 
     print("\n1. Testing search_srag_news_tool()...")
-    print("   ⚠️  Skipped - Tavily API calls are paid. Tool is available but not executed.")
+    print(
+        "   ⚠️  Skipped - Tavily API calls are paid. Tool is available but not executed."
+    )
     print(f"   ✅ Tool name: {search_srag_news_tool.name}")
     print(f"   ✅ Tool description: {search_srag_news_tool.description[:80]}...")
 
@@ -180,11 +184,21 @@ def test_report_tools() -> None:
         report_dict = generate_full_report_for_chat.invoke(
             {"uf": "SP", "days": 30, "months": 12, "include_news": False}
         )
-        print(f"   ✅ Report text length: {len(report_dict.get('report_text', '')):,} chars")
-        print(f"   Daily chart JSON length: {len(report_dict.get('daily_chart_json', '')):,} chars")
-        print(f"   Monthly chart JSON length: {len(report_dict.get('monthly_chart_json', '')):,} chars")
-        print(f"   News articles: {len(report_dict.get('news', []))} (skipped - API is paid)")
-        print(f"\n   Report text preview:\n{report_dict.get('report_text', '')[:300]}...")
+        print(
+            f"   ✅ Report text length: {len(report_dict.get('report_text', '')):,} chars"
+        )
+        print(
+            f"   Daily chart JSON length: {len(report_dict.get('daily_chart_json', '')):,} chars"
+        )
+        print(
+            f"   Monthly chart JSON length: {len(report_dict.get('monthly_chart_json', '')):,} chars"
+        )
+        print(
+            f"   News articles: {len(report_dict.get('news', []))} (skipped - API is paid)"
+        )
+        print(
+            f"\n   Report text preview:\n{report_dict.get('report_text', '')[:300]}..."
+        )
     except Exception as e:
         print(f"   ❌ Error: {e}")
 
@@ -247,4 +261,3 @@ if __name__ == "__main__":
         import traceback
 
         traceback.print_exc()
-
