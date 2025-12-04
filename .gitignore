@@ -225,3 +225,6 @@ __pycache__/
 .DS_Store
 *.pyc
 .env
+
+# Secrets and credentials (never commit these)
+.secrets/
