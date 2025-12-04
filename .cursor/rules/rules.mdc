@@ -1,0 +1,306 @@
+---
+alwaysApply: true
+---
+# Global workflow, execution & coding rules
+
+## 1. Workflow and approvals (PLAN → DRAFT → APPLY)
+
+- Never modify files, run code, run tests, or execute any commands before I explicitly approve.
+- This applies to all modes, including Agent / autopilot modes.
+
+### PLAN (no code, no edits, no execution)
+- First, read all relevant files and context fully.
+- Reply with:
+  - A short summary of your understanding of the request.
+  - A clear, ordered list of steps you intend to take.
+- Do **not** generate or apply any code changes in this phase.
+- Do **not** run any commands in this phase.
+
+### DRAFT (proposed changes only, still no execution)
+- Only after I explicitly approve the PLAN **and** confirm that I want code for this task, move to DRAFT.
+- Generate proposed code as code blocks or diffs.
+- Clearly indicate:
+  - Which files you would change.
+  - Which sections / functions you would modify or create.
+  - Which commands you propose to run (tests, scripts, tooling, inspections, etc.).
+- Do **not** modify files yet and do **not** run anything.
+
+### APPLY (actual changes and execution)
+- Only after I explicitly approve the DRAFT may you:
+  - Apply changes to files.
+  - Run any commands (tests, scripts, linters, package inspections, etc.).
+- After APPLY, provide a concise summary of:
+  - What changed in which files.
+  - What commands were executed and their high-level results.
+
+
+## 2. File reading and context
+
+- When I ask about a specific file, always read the **entire file first**, line by line, to understand the context before answering or proposing changes.
+- Base your answer on the full file, not only on a small snippet, unless I explicitly restrict you to a snippet.
+- If you do not actually have the full file in your context:
+  - Explicitly state that you are missing context.
+  - Ask me to open or provide the full file so you can analyse it properly.
+
+
+## 3. Commenting style
+
+- When adding or editing comments in code:
+  - Be succinct and focus on describing the **functionality** of the code.
+  - Comments should explain what the code does and, when relevant, why.
+- Never add comments about chat history or my requests, such as:
+  - `// user requested this change`
+  - `// updated according to previous chat`
+- Keep comments focused on current behaviour, not on change history.
+- Prefer short, clear comments placed where they help understanding, not long narratives.
+
+
+## 4. Python tests and execution (venv + uv)
+
+- Assume all Python work uses a project virtual environment managed via `uv`.
+- When suggesting or running Python-related commands (tests, scripts, tools), prefer forms such as:
+  - `uv run pytest path/to/test_file.py`
+  - `uv run python path/to_script.py`
+- Do not suggest or use bare `python`, `pip`, or `pytest` unless I explicitly say otherwise.
+- When installing or managing dependencies, prefer `uv` commands (e.g. `uv add`, `uv sync`) instead of plain `pip`, unless I explicitly instruct otherwise.
+- All these commands are still subject to the PLAN → DRAFT → APPLY protocol:
+  - In PLAN, list intended commands (without running).
+  - In DRAFT, show the exact commands you intend to run.
+  - In APPLY, run them only after explicit approval.
+
+
+## 5. Python packages: always use the installed version
+
+- When I ask about a specific Python package (usage, APIs, configuration, etc.):
+  - First determine which version of that package is installed in this environment.
+  - Do not assume “latest” behaviour.
+
+### Version and API inspection
+- Treat inspection as execution under PLAN → DRAFT → APPLY:
+  - PLAN: propose how you will inspect the package, for example:
+    - `uv run python -c "import <package>; print(<package>.__version__)"`
+    - `uv run python -c "import <package>; import inspect; print(dir(<package>))"`
+  - DRAFT: show these commands and any additional inspection steps, but do **not** run them.
+  - APPLY: only run them after I explicitly approve.
+- After determining the installed version:
+  - Base explanations and code examples on that version.
+  - Prefer the official documentation for that **specific version**.
+  - You may combine documentation with introspection results (`dir`, `help`, `inspect`) for accuracy.
+
+### Not installed
+- If the package is not installed:
+  - Explicitly state that it is not currently installed.
+  - Do not install it automatically.
+  - You may suggest the appropriate `uv` command (e.g. `uv add <package>`) as text and wait for my decision.
+
+### Source of truth
+- If there is any conflict between generic/latest knowledge and the installed package:
+  - Treat the installed version (plus its official docs) as the source of truth.
+  - Do not use APIs that are not present or not valid in the installed version.
+
+
+## 6. CLI tools, runtimes and other languages
+
+- The “installed-version-first” logic also applies to all CLI tools and non-Python runtimes, for example:
+  - Node.js / npm / pnpm / yarn
+  - Java / Go / Rust
+  - Terraform / Docker / git
+  - Any other language/toolchain used in this project.
+
+### Version and config discovery
+- Do not assume versions or behaviour.
+- Treat CLI inspection as execution:
+  - PLAN: list the commands or files you will use to discover version/config, such as:
+    - `<tool> --version` or `<tool> version`
+    - Reading project config/lock files (`package.json`, `pyproject.toml`, `poetry.lock`, `Cargo.toml`, etc.).
+  - DRAFT: show these commands and files you intend to check, but do not run anything.
+  - APPLY: run commands only after explicit approval.
+- Once you know the actual version/config:
+  - Base your commands, recommendations, and code examples on that reality.
+  - Prefer official docs for that version.
+  - If docs differ from behaviour, prioritise what is actually installed and configured.
+
+### Tool not available
+- If a tool or runtime does not appear to be available:
+  - Say so explicitly.
+  - Do not install or configure anything automatically.
+  - You may propose installation/setup commands, but only as text and only after I ask for them.
+
+
+## 7. Using libraries when generating code
+
+- Whenever you generate or modify code that uses any library (Python or otherwise):
+  - Do not invent functions, methods, or parameters.
+  - Do not rely solely on generic memory of that library.
+
+### API verification
+- Before relying on a library API in generated code:
+  - Verify that the symbol exists in the installed version (via docs and/or introspection).
+  - Verify the call signature you intend to use (parameters, return type, basic behaviour).
+- Follow PLAN → DRAFT → APPLY:
+  - PLAN: state that you will verify the relevant APIs before coding.
+  - DRAFT: show how you will verify them (documentation sources and/or introspection commands), but do not run commands yet.
+  - APPLY: only run introspection commands after explicit approval, and then adjust code if needed.
+
+### Code generation with libraries
+- When in doubt about an API:
+  - Say you are unsure and propose alternatives instead of guessing.
+- Never generate code that uses:
+  - Hypothetical functions/methods.
+  - Non-existent parameters.
+  - APIs not compatible with the installed version.
+
+
+## 8. Clarifying questions
+
+- If any part of my request or the context is unclear or ambiguous, ask clarifying questions **before** moving to DRAFT or APPLY.
+- Prefer a small number of targeted, concrete questions rather than many broad ones.
+
+### When to ask
+- Examples of when you must ask for clarification:
+  - The goal or expected output is not clearly defined.
+  - There are multiple plausible interpretations of what I asked.
+  - You are unsure which file, environment, or tool the request refers to.
+  - The requested change may have significant side effects (large refactors, deletions, behavioural changes).
+
+### How to ask
+- Be explicit about what is unclear.
+- Propose your best interpretation and ask me to confirm or correct it.
+- Do not write or apply code changes until I respond and you can update your PLAN accordingly.
+
+
+## 9. Function design and code structure
+
+- Prefer small, modular functions instead of large, monolithic ones.
+- Avoid deep nesting and excessive indentation:
+  - If a function needs many nested blocks (`if`, loops, `try/except`, etc.), refactor into smaller helpers.
+
+### Generic, reusable implementations
+- Focus on generic, reusable logic:
+  - Avoid hardcoding values, paths, or environment-specific details inside core functions.
+  - Hardcoded or project-specific values should be passed as parameters or defined at call sites.
+- Functions should follow single-responsibility principles whenever practical.
+- If a function becomes long or complex, split it into smaller, well-named helpers.
+
+### Naming
+- Use clear, descriptive function names in English.
+- Keep function names to at most 3–4 words, and avoid 4 unless absolutely necessary.
+- Prefer names that reflect intention and behaviour, as a senior data scientist/engineer would, e.g.:
+  - `load_raw_events`
+  - `compute_daily_metrics`
+  - `validate_schema`
+  - `build_feature_matrix`
+- Avoid vague names like `do_stuff` or `process_data` and avoid overly long sentence-like names.
+
+
+## 10. Code generation permissions
+
+- Never generate or propose any code (including scripts, configuration files, command lines, or test snippets) unless:
+  - I explicitly ask for code, or
+  - I explicitly confirm that I want you to write code for the current task.
+
+### Interaction with PLAN → DRAFT → APPLY
+- In PLAN:
+  - Describe in prose what kind of code you would write, but do **not** write any code.
+- Moving to DRAFT:
+  - Only move to DRAFT and generate code after:
+    - I have approved your PLAN, **and**
+    - I have clearly confirmed that I want code for this task.
+- If a request is ambiguous about whether I want code or just an explanation:
+  - Ask me to confirm before generating any code.
+- For purely conceptual, architectural, or debugging questions:
+  - Default to prose explanations only, unless I explicitly request code examples.
+
+
+## 11. Code language
+
+- All code must be written in **English**, including:
+  - Variable names.
+  - Function, class, and module names.
+  - Comments and docstrings.
+  - Log messages and error messages (unless they must match an external spec/localised UI).
+
+### Exceptions
+- Only use non-English text in code when strictly required by:
+  - External APIs or contracts that specify exact messages/fields.
+  - Legacy interfaces that must not change.
+  - User-facing text that must be localised and whose language I explicitly specify.
+- Even in these exceptions:
+  - Keep surrounding identifiers, comments, and structure in English.
+
+## 12. Simplicity and scope control
+
+- Do not overengineer, overgeneralise, or add unnecessary complexity.
+- Focus on simple, clear, and functional implementations that directly address what I explicitly asked for.
+- Avoid:
+  - Adding features, abstractions, or configuration layers that I did not request.
+  - Refactors or structural changes beyond the minimum needed to implement the requested behavior.
+  - Introducing new patterns, frameworks, or dependencies unless I explicitly ask for them.
+- When designing solutions:
+  - Prefer the simplest approach that is correct, maintainable, and consistent with existing code and these rules.
+  - Keep the scope strictly aligned with the explicit requirements of my request.
+- If you believe an extra change, refactor, or abstraction would be beneficial:
+  - Mention it separately in prose as an optional suggestion.
+  - Do not implement it unless I explicitly approve that extension of scope.
+
+## 13. Linting and static analysis
+
+- Do not change code just to satisfy linters unless I explicitly ask you to fix linting or static analysis issues.
+- When I explicitly ask to fix linting or static analysis problems:
+  - Actually fix the underlying issue rather than hiding or bypassing it.
+  - Do not simply:
+    - Wrap code in `try/except` to silence errors.
+    - Add ignore comments (e.g. `# noqa`, `# type: ignore`, `// eslint-disable-next-line`) unless I explicitly request that approach.
+    - Change the code in a way that preserves the lint error in a different form.
+- Preferred behaviour when fixing linting issues:
+  - Understand what the linter or tool is complaining about.
+  - Adjust the code so it is both correct and compliant with the relevant rule.
+  - Keep the fix as small, clear, and safe as possible, aligned with the existing code style and these rules.
+- If a linter warning reflects a deliberate, acceptable trade-off:
+  - Explain the trade-off in prose.
+  - Ask whether I want the warning suppressed via configuration or ignore comments before doing so.
+
+## 14. Error and problem diagnosis
+
+- When I send an error, stack trace, failing test output, or description of a problem:
+  - First diagnose based on the combination of the error and the relevant code.
+  - Always search and inspect the relevant code paths, files, and usages before answering.
+  - Never answer based only on the text of the error message.
+
+- Diagnosis workflow:
+  - Identify which files, functions, and calls are involved in the error.
+  - Read those parts of the codebase carefully to understand actual behaviour and context.
+  - Correlate the error with the code and data flow, not just with generic patterns.
+
+- External verification:
+  - Before finalising an explanation or fix, always cross-check your understanding against up-to-date, authoritative sources (for example official documentation, issue trackers, or vendor guides) for the specific versions of the tools/libraries involved.
+  - Prefer official or otherwise reliable sources and ensure they match the installed versions and project configuration.
+
+- Proposing fixes:
+  - Base any proposed fix on this combined analysis (code + error + external references).
+  - Make sure your explanation clearly connects:
+    - The root cause in the code or configuration.
+    - Why the error occurs.
+    - How the proposed change resolves it.
+  - If uncertainty remains after analysis and research, say so explicitly and present the most likely causes and options instead of guessing.
+
+## 15. File and folder organisation
+
+- When adding new functions or code:
+  - Prefer placing them in existing files whose names and purposes are already similar or related.
+  - Before creating anything new, inspect the current folder structure and files to find the most appropriate place.
+
+- Avoid creating new files if an existing file with a compatible, meaningful name can reasonably host the new function.
+  - Only create a new file when:
+    - There is no existing file with a clearly related purpose, and
+    - Adding to an existing file would make it too large or unfocused.
+
+- When a new file is truly necessary:
+  - Use a short, generic, and descriptive name that reflects the kind of work the functions do (e.g. `io_utils.py`, `feature_builders.py`, `validation.py`).
+  - Keep the file focused on a coherent responsibility.
+
+- Creating new directories should be avoided by default.
+  - Only create a new directory if:
+    - The current directory is clearly overloaded with unrelated concerns, and
+    - There is a clear, stable grouping for multiple files (not just one).
+  - New directories should have concise, meaningful names that match their contents and align with the existing project structure.
