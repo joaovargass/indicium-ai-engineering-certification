@@ -1,0 +1,383 @@
+"""Data transformation module for SRAG data."""
+
+import pandas as pd
+
+from common.config import (
+    CATEGORICAL_VALIDATIONS,
+    COVID_VACCINE_DATE_COLS,
+    DATE_COLUMNS,
+    ESSENTIAL_COLUMNS,
+    EXCLUDED_FROM_NULL_CHECK,
+    IGNORED_FIELDS,
+    NULL_STRINGS,
+    PRIMARY_KEY_FIELD,
+)
+
+
+def _get_string_cols(df: pd.DataFrame) -> list[str]:
+    """Get all string columns from DataFrame."""
+    return df.select_dtypes(include=["object", "string"]).columns.tolist()
+
+
+def convert_nulls(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize all null value representations to actual null."""
+    df = df.copy()
+
+    for col_name in df.columns:
+        is_string = df[col_name].dtype == "object" or str(
+            df[col_name].dtype
+        ).startswith("string")
+
+        if is_string:
+            col_str = df[col_name].astype(str)
+            col_upper = col_str.str.strip().str.upper()
+            null_mask = (
+                col_upper.isin([s.upper() for s in NULL_STRINGS])
+                | (col_str == "")
+                | (col_str.str.strip() == "")
+                | col_str.str.upper().isin(["NAN", "<NA>", "NAT", "NONE"])
+                | df[col_name].isna()
+            )
+            df.loc[null_mask, col_name] = None
+
+    return df
+
+
+def fix_strings(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize whitespace in string columns."""
+    df = df.copy()
+    for col_name in _get_string_cols(df):
+        if col_name not in df.columns:
+            continue
+
+        non_null = df[col_name].notna()
+        if not non_null.any():
+            continue
+
+        cleaned = (
+            df[col_name].astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
+        )
+
+        empty = (cleaned == "") | (cleaned == " ")
+        df.loc[empty, col_name] = None
+        df.loc[non_null & ~empty, col_name] = cleaned[non_null & ~empty]
+
+    return df
+
+
+def convert_types(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert date columns to datetime."""
+    df = df.copy()
+    date_formats = ["%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"]
+
+    for col_name in DATE_COLUMNS:
+        if col_name not in df.columns:
+            continue
+
+        col_data = df[col_name]
+        if col_data.isna().all():
+            df[col_name] = pd.to_datetime(col_data, errors="coerce")
+            continue
+
+        converted = None
+        for fmt in date_formats:
+            try:
+                converted = pd.to_datetime(col_data, format=fmt, errors="coerce")
+                if converted.notna().any():
+                    break
+            except Exception:
+                continue
+
+        if converted is None or converted.isna().all():
+            converted = pd.to_datetime(col_data, errors="coerce")
+
+        df[col_name] = converted
+
+    return df
+
+
+def convert_ignored(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert '9 = Ignored' values to NULL."""
+    df = df.copy()
+    for field in IGNORED_FIELDS:
+        if field not in df.columns:
+            continue
+        field_str = df[field].astype(str).str.strip()
+        mask = (field_str == "9") | (field_str == "9.0")
+        df.loc[mask, field] = None
+    return df
+
+
+def _impute_symptom_dates(df: pd.DataFrame) -> pd.DataFrame:
+    """Impute DT_SIN_PRI from DT_NOTIFIC."""
+    if "DT_SIN_PRI" in df.columns and "DT_NOTIFIC" in df.columns:
+        df["DT_SIN_PRI"] = df["DT_SIN_PRI"].fillna(df["DT_NOTIFIC"])
+
+    if "DT_SIN_PRI" in df.columns:
+        today = pd.Timestamp.now().normalize()
+        future = df["DT_SIN_PRI"] > today
+        if future.any():
+            df.loc[future, "DT_SIN_PRI"] = today
+
+    return df
+
+
+def _impute_icu(df: pd.DataFrame) -> pd.DataFrame:
+    """Impute ICU-related dates and flags."""
+    if all(c in df.columns for c in ["DT_ENTUTI", "DT_INTERNA", "UTI"]):
+        mask = (df["UTI"] == "1") & df["DT_ENTUTI"].isna() & df["DT_INTERNA"].notna()
+        df.loc[mask, "DT_ENTUTI"] = df.loc[mask, "DT_INTERNA"]
+
+    if "UTI" in df.columns:
+        for date_col in ["DT_ENTUTI", "DT_SAIDUTI"]:
+            if date_col in df.columns:
+                mask = df["UTI"].isna() & df[date_col].notna()
+                if mask.any():
+                    df.loc[mask, "UTI"] = "1"
+
+    if all(c in df.columns for c in ["UTI", "HOSPITAL", "DT_ENTUTI"]):
+        mask = df["UTI"].isna() & (df["HOSPITAL"] == "1") & df["DT_ENTUTI"].isna()
+        if mask.any():
+            df.loc[mask, "UTI"] = "2"
+
+    if all(c in df.columns for c in ["DT_SAIDUTI", "DT_EVOLUCA", "UTI", "DT_ENTUTI"]):
+        mask = (
+            (df["UTI"] == "1")
+            & df["DT_SAIDUTI"].isna()
+            & df["DT_EVOLUCA"].notna()
+            & (df["DT_EVOLUCA"] >= df["DT_ENTUTI"])
+        )
+        df.loc[mask, "DT_SAIDUTI"] = df.loc[mask, "DT_EVOLUCA"]
+
+    return df
+
+
+def _impute_vaccine(df: pd.DataFrame) -> pd.DataFrame:
+    """Impute vaccination status."""
+    available = [c for c in COVID_VACCINE_DATE_COLS if c in df.columns]
+
+    if "VACINA_COV" in df.columns and available:
+        has_date = df[available].notna().any(axis=1)
+        mask = df["VACINA_COV"].isna() & has_date
+        if mask.any():
+            df.loc[mask, "VACINA_COV"] = "1"
+
+    if "VACINA_COV" in df.columns and "DT_NOTIFIC" in df.columns and available:
+        cutoff = pd.Timestamp("2021-01-01")
+        no_evidence = ~df[available].notna().any(axis=1)
+        post_era = df["DT_NOTIFIC"] >= cutoff
+        mask = df["VACINA_COV"].isna() & no_evidence & post_era
+        if mask.any():
+            df.loc[mask, "VACINA_COV"] = "2"
+
+    if all(c in df.columns for c in ["VACINA", "DT_UT_DOSE"]):
+        mask = df["VACINA"].isna() & df["DT_UT_DOSE"].notna()
+        if mask.any():
+            df.loc[mask, "VACINA"] = "1"
+
+    return df
+
+
+def impute_missing(df: pd.DataFrame) -> pd.DataFrame:
+    """Impute missing values using business logic."""
+    df = df.copy()
+    df = _impute_symptom_dates(df)
+    df = _impute_icu(df)
+    df = _impute_vaccine(df)
+    return df
+
+
+def validate_dates(df: pd.DataFrame) -> pd.DataFrame:
+    """Fix invalid date relationships."""
+    df = df.copy()
+    if all(c in df.columns for c in ["DT_SIN_PRI", "DT_NOTIFIC"]):
+        mask = (df["DT_SIN_PRI"] > df["DT_NOTIFIC"]) & df["DT_NOTIFIC"].notna()
+        df.loc[mask, "DT_SIN_PRI"] = df.loc[mask, "DT_NOTIFIC"]
+    return df
+
+
+def validate_cats(df: pd.DataFrame) -> pd.DataFrame:
+    """Set invalid categorical values to NULL."""
+    df = df.copy()
+    for col_name, valid in CATEGORICAL_VALIDATIONS.items():
+        if col_name not in df.columns:
+            continue
+        cleaned = df[col_name].astype(str).str.strip()
+        invalid = cleaned.notna() & ~cleaned.isin(valid)
+        count = invalid.sum()
+        if count > 0:
+            print(f"  {col_name}: {count:,} invalid -> NULL")
+            df.loc[invalid, col_name] = None
+    return df
+
+
+def remove_invalid(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove records missing primary key or all null."""
+    if PRIMARY_KEY_FIELD not in df.columns:
+        print(f"Warning: {PRIMARY_KEY_FIELD} not found")
+        return df
+
+    initial = len(df)
+
+    df = df[df[PRIMARY_KEY_FIELD].notna()].copy()
+    removed_pk = initial - len(df)
+
+    excluded = set(c for c in EXCLUDED_FROM_NULL_CHECK if c in df.columns)
+    check_cols = [c for c in df.columns if c not in excluded]
+
+    removed_null = 0
+    if check_cols:
+        all_null = df[check_cols].isna().all(axis=1)
+        before = len(df)
+        df = df[~all_null].copy()
+        removed_null = before - len(df)
+
+    total = initial - len(df)
+    if total > 0:
+        print(f"Removed {total:,} ({removed_pk:,} no PK, {removed_null:,} all null)")
+
+    return df
+
+
+def _is_valid_date(df: pd.DataFrame, col: str) -> pd.Series:
+    """Check if column has valid dates."""
+    if col not in df.columns:
+        return pd.Series([False] * len(df), index=df.index)
+    c = df[col]
+    if pd.api.types.is_datetime64_any_dtype(c):
+        return c.notna()
+    return c.notna() & (c.astype(str).str.strip() != "")
+
+
+def _is_valid_cat(df: pd.DataFrame, col: str, values: list[str]) -> pd.Series:
+    """Check if column has valid categorical values."""
+    if col not in df.columns:
+        return pd.Series([False] * len(df), index=df.index)
+    return df[col].astype(str).str.strip().isin(values)
+
+
+def filter_actionable(df: pd.DataFrame) -> pd.DataFrame:
+    """Filter records that can contribute to metrics."""
+    initial = len(df)
+
+    for_incidence = _is_valid_date(df, "DT_SIN_PRI") | _is_valid_date(df, "DT_NOTIFIC")
+    for_mortality = _is_valid_cat(df, "EVOLUCAO", ["1", "2", "3"])
+    for_icu = _is_valid_cat(df, "UTI", ["1", "2"])
+    for_vaccine = _is_valid_cat(df, "VACINA_COV", ["1", "2"]) | _is_valid_cat(
+        df, "VACINA", ["1", "2"]
+    )
+
+    actionable = for_incidence | for_mortality | for_icu | for_vaccine
+
+    non_actionable = (~actionable).sum()
+    if non_actionable > 0:
+        print(f"\n  Non-actionable: {non_actionable:,}")
+
+    df = df[actionable].copy()
+    excluded = initial - len(df)
+    if excluded > 0:
+        pct = (excluded / initial * 100) if initial > 0 else 0
+        print(f"  Excluded {excluded:,} non-actionable ({pct:.2f}%)")
+
+    return df
+
+
+def select_essential(df: pd.DataFrame) -> pd.DataFrame:
+    """Select only essential columns."""
+    available = df.columns.tolist()
+    missing = [c for c in ESSENTIAL_COLUMNS if c not in available]
+
+    cols = ESSENTIAL_COLUMNS
+    if missing:
+        print(f"Warning: Missing columns: {missing}")
+        cols = [c for c in ESSENTIAL_COLUMNS if c in available]
+
+    print(f"\nSelecting {len(cols)} essential columns from {len(available)} total")
+    result = df[cols]
+
+    print(f"  Rows: {len(result):,}")
+    print(f"  Columns: {len(result.columns)}")
+
+    return result
+
+
+def analyze_schema(df: pd.DataFrame) -> None:
+    """Print schema summary."""
+    print("=" * 60)
+    print("SCHEMA ANALYSIS")
+    print("=" * 60)
+    print(f"Columns: {len(df.columns)}")
+    print(f"Records: {len(df):,}\n")
+    for col in df.columns:
+        print(f"  {col:30s} {str(df[col].dtype)}")
+
+
+def report_quality(df: pd.DataFrame, original: pd.DataFrame) -> None:
+    """Print data quality report."""
+    print("\n" + "=" * 60)
+    print("DATA QUALITY REPORT")
+    print("=" * 60)
+    initial = len(original)
+    final = len(df)
+    removed = initial - final
+    pct = (removed / initial * 100) if initial > 0 else 0
+    print(f"\nRecords: {initial:,} -> {final:,}")
+    print(f"Removed: {removed:,} ({pct:.2f}%)")
+
+    print("\nMissing values (top 10):")
+    missing = []
+    for col in df.columns:
+        null_count = df[col].isna().sum()
+        if null_count > 0:
+            p = (null_count / final * 100) if final > 0 else 0
+            missing.append((col, null_count, p))
+
+    if missing:
+        for name, count, p in sorted(missing, key=lambda x: x[2], reverse=True)[:10]:
+            print(f"  {name:30s} {count:10,} ({p:6.2f}%)")
+    else:
+        print("  No missing values!")
+    print("=" * 60)
+
+
+def clean_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Execute the data cleaning pipeline."""
+    print("\n" + "=" * 60)
+    print("DATA CLEANING PIPELINE")
+    print("=" * 60)
+
+    original = df.copy()
+    analyze_schema(df)
+
+    print("\n1. Converting NULL strings...")
+    df = convert_nulls(df)
+
+    print("2. Fixing whitespace...")
+    df = fix_strings(df)
+
+    print("3. Converting date types...")
+    df = convert_types(df)
+
+    print("4. Converting 'Ignored' (9) to NULL...")
+    df = convert_ignored(df)
+
+    print("5. Imputing missing values...")
+    df = impute_missing(df)
+
+    print("6. Validating dates...")
+    df = validate_dates(df)
+
+    print("7. Validating categories...")
+    df = validate_cats(df)
+
+    print("8. Removing invalid records...")
+    df = remove_invalid(df)
+
+    print("9. Filtering actionable records...")
+    df = filter_actionable(df)
+
+    print("\nFinal schema:")
+    analyze_schema(df)
+    report_quality(df, original)
+
+    return df
