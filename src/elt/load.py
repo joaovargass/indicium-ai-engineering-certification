@@ -162,6 +162,7 @@ def reset_all_state(local_data_dir: Path | None = None) -> None:
     try:
         conn_str, server, db = _get_sql_connection()
         from sqlalchemy import create_engine, text
+
         engine = create_engine(conn_str, isolation_level="AUTOCOMMIT")
         schema, tbl = DW_FULLY_QUALIFIED_TABLE.rsplit(".", 1)
         with engine.connect() as conn:
@@ -254,7 +255,8 @@ def _cleanup_vivo_deltas(
 ) -> tuple[dict, bool]:
     """Remove vivo deltas for a year transitioning to congelado."""
     vivo_deltas = [
-        d for d in raw_state.get("deltas", [])
+        d
+        for d in raw_state.get("deltas", [])
         if d.get("type") == "vivo" and d.get("year") == year
     ]
 
@@ -275,14 +277,14 @@ def _cleanup_vivo_deltas(
             print(f"  Deleted: {delta['filename']}")
 
     raw_state["deltas"] = [
-        d for d in raw_state["deltas"]
+        d
+        for d in raw_state["deltas"]
         if not (d.get("type") == "vivo" and d.get("year") == year)
     ]
 
     if any_vivo_processed:
         dw_state["processed_deltas"] = [
-            f for f in dw_state["processed_deltas"]
-            if f not in vivo_filenames
+            f for f in dw_state["processed_deltas"] if f not in vivo_filenames
         ]
         save_dw_state(client, dw_state)
         print(f"  Cleaned up DW state (removed {len(vivo_filenames)} old entries)")
@@ -488,12 +490,53 @@ def _get_sql_connection() -> tuple[str, str, str]:
     return conn_str, server, db
 
 
+def read_from_dw(
+    query: str | None = None,
+    table: str = DW_FULLY_QUALIFIED_TABLE,
+) -> pd.DataFrame:
+    """
+    Read data from Azure SQL Data Warehouse.
+
+    Args:
+        query: Optional SQL query string. If None, reads entire table.
+        table: Table name to read from (default: DW_FULLY_QUALIFIED_TABLE).
+
+    Returns:
+        DataFrame with data from DW.
+
+    """
+    try:
+        from sqlalchemy import create_engine
+    except ImportError as e:
+        raise ImportError("sqlalchemy and pyodbc required") from e
+
+    conn_str, server, db = _get_sql_connection()
+    engine = create_engine(conn_str, isolation_level="AUTOCOMMIT")
+
+    if query is None:
+        schema = os.getenv("AZURE_SQL_SCHEMA", "dbo")
+        if "." in table:
+            schema, tbl = table.rsplit(".", 1)
+        else:
+            tbl = table
+        query = f"SELECT * FROM {schema}.{tbl}"
+
+    print(f"Reading from {server}/{db}")
+    with engine.connect() as conn:
+        df = pd.read_sql(query, conn)
+
+    engine.dispose()
+    print(f"Loaded {len(df):,} rows")
+    return df
+
+
 def save_to_dw(
     df: pd.DataFrame,
     table: str = DW_FULLY_QUALIFIED_TABLE,
     if_exists: str = "append",
 ) -> int:
-    """Save DataFrame to Azure Synapse using COPY INTO.
+    """
+    Save DataFrame to Azure Synapse using COPY INTO.
 
     Requires AZURE_STORAGE_KEY environment variable.
     """
@@ -550,7 +593,7 @@ def _save_to_dw_copy_into(
         file_chunk_size = 500000
 
         for i, start in enumerate(range(0, len(df), file_chunk_size)):
-            chunk = df.iloc[start:start + file_chunk_size]
+            chunk = df.iloc[start : start + file_chunk_size]
             parquet_path = f"{staging_dir}/part_{i:04d}.parquet"
             _upload_parquet(client, chunk, parquet_path, local_temp_dir)
             parquet_files.append(parquet_path)
@@ -560,8 +603,10 @@ def _save_to_dw_copy_into(
         with engine.connect() as conn:
             if if_exists == "replace":
                 conn.execute(
-                    text(f"IF OBJECT_ID('{schema}.{tbl}', 'U') IS NOT NULL "
-                         f"DROP TABLE {schema}.{tbl}")
+                    text(
+                        f"IF OBJECT_ID('{schema}.{tbl}', 'U') IS NOT NULL "
+                        f"DROP TABLE {schema}.{tbl}"
+                    )
                 )
 
             adls_url = (
@@ -586,15 +631,19 @@ def _save_to_dw_copy_into(
 
             if if_exists == "replace" and PRIMARY_KEY_FIELD in df.columns:
                 try:
-                    conn.execute(text(
-                        f"ALTER TABLE {schema}.{tbl} "
-                        f"ALTER COLUMN {PRIMARY_KEY_FIELD} BIGINT NOT NULL"
-                    ))
-                    conn.execute(text(
-                        f"ALTER TABLE {schema}.{tbl} "
-                        f"ADD CONSTRAINT PK_{tbl} PRIMARY KEY NONCLUSTERED "
-                        f"({PRIMARY_KEY_FIELD}) NOT ENFORCED"
-                    ))
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {schema}.{tbl} "
+                            f"ALTER COLUMN {PRIMARY_KEY_FIELD} BIGINT NOT NULL"
+                        )
+                    )
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {schema}.{tbl} "
+                            f"ADD CONSTRAINT PK_{tbl} PRIMARY KEY NONCLUSTERED "
+                            f"({PRIMARY_KEY_FIELD}) NOT ENFORCED"
+                        )
+                    )
                     print(f"  Added PK constraint on {PRIMARY_KEY_FIELD}")
                 except Exception as pk_err:
                     print(f"  PK constraint skipped: {pk_err}")
