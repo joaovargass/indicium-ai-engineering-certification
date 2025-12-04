@@ -1,4 +1,5 @@
-"""Test script for SRAG agent.
+"""
+Test script for SRAG agent.
 
 This script tests the agent's basic functionality:
 1. Simple queries (no tools needed)
@@ -19,14 +20,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_PATH = PROJECT_ROOT / "src"
 sys.path.insert(0, str(SRC_PATH))
 
-from agent import invoke_agent, create_agent_graph
-from langchain_core.messages import HumanMessage
+
+from agent import create_agent_graph, invoke_agent
 
 
 def test_agent_imports():
     """Test that all imports work correctly."""
     print("\n✅ Testing imports...")
-    from agent.graph import AgentState, create_agent_graph
     from agent.prompts import SYSTEM_PROMPT
     from tools import ALL_TOOLS
 
@@ -60,7 +60,7 @@ def test_simple_query():
         messages = result["messages"]
         last_message = messages[-1]
 
-        print(f"   ✅ Agent responded")
+        print("   ✅ Agent responded")
         print(f"   ✅ Response type: {type(last_message)}")
         print(f"   ✅ Response length: {len(last_message.content)} characters")
         print(f"   ✅ Response preview: {last_message.content[:100]}...")
@@ -68,6 +68,7 @@ def test_simple_query():
     except Exception as e:
         print(f"   ❌ Query failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -83,12 +84,16 @@ def test_metric_query():
 
         # Check that we got a response
         last_message = messages[-1]
-        print(f"   ✅ Agent responded")
+        print("   ✅ Agent responded")
         print(f"   ✅ Total messages: {len(messages)}")
         print(f"   ✅ Response preview: {last_message.content[:200]}...")
 
         # Check if tool was called (should have ToolMessage in history)
-        tool_messages = [msg for msg in messages if hasattr(msg, "name") and msg.name == "get_mortality_rate"]
+        tool_messages = [
+            msg
+            for msg in messages
+            if hasattr(msg, "name") and msg.name == "get_mortality_rate"
+        ]
         if tool_messages:
             print(f"   ✅ Tool was called: {len(tool_messages)} time(s)")
         else:
@@ -98,6 +103,7 @@ def test_metric_query():
     except Exception as e:
         print(f"   ❌ Query failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -111,12 +117,12 @@ def test_conversation_continuity():
         # First message
         print("   Message 1: 'What is the mortality rate in SP?'")
         result1 = invoke_agent("What is the mortality rate in SP?", thread_id=thread_id)
-        print(f"   ✅ First response received")
+        print("   ✅ First response received")
 
         # Follow-up message (should understand context)
         print("   Message 2: 'What about Rio de Janeiro?'")
         result2 = invoke_agent("What about Rio de Janeiro?", thread_id=thread_id)
-        print(f"   ✅ Second response received")
+        print("   ✅ Second response received")
 
         # Check that thread_id is preserved
         assert result1["thread_id"] == thread_id
@@ -126,12 +132,13 @@ def test_conversation_continuity():
         # Check message count (should have more messages in second result)
         print(f"   ✅ First conversation: {len(result1['messages'])} messages")
         print(f"   ✅ Second conversation: {len(result2['messages'])} messages")
-        print(f"   ✅ Conversation history maintained")
+        print("   ✅ Conversation history maintained")
 
         return True
     except Exception as e:
         print(f"   ❌ Conversation test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -148,7 +155,12 @@ def test_guardrail():
         response_text = last_message.content.lower()
 
         # Check if agent refused
-        refusal_keywords = ["medical advice", "healthcare professional", "cannot provide", "not designed"]
+        refusal_keywords = [
+            "medical advice",
+            "healthcare professional",
+            "cannot provide",
+            "not designed",
+        ]
         has_refusal = any(keyword in response_text for keyword in refusal_keywords)
 
         if has_refusal:
@@ -162,6 +174,7 @@ def test_guardrail():
     except Exception as e:
         print(f"   ❌ Guardrail test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -206,6 +219,7 @@ def run_interactive_test():
         except Exception as e:
             print(f"\n❌ Error: {e}")
             import traceback
+
             traceback.print_exc()
 
 
@@ -226,7 +240,7 @@ def main():
 
     # Run tests
     test_agent_imports()
-    graph = test_graph_creation()
+    test_graph_creation()
 
     # These tests require API key
     if api_key:
@@ -250,4 +264,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
