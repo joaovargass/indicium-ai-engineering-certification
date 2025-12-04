@@ -228,3 +228,6 @@ __pycache__/
 
 # Secrets and credentials (never commit these)
 .secrets/
+
+docs
+docs/**
