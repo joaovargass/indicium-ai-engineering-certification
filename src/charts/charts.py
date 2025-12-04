@@ -8,7 +8,11 @@ from plotly.graph_objects import Figure
 
 # Professional color palette (colorblind-friendly)
 CHART_COLOR = "#2E86AB"
-CHART_COLOR_LIGHT = "#A8D5E2"
+
+
+def figure_to_json(fig: Figure) -> str:
+    """Convert Plotly Figure to JSON string."""
+    return fig.to_json()
 
 
 def _prepare_data(
@@ -219,6 +223,27 @@ def _create_bar_chart(
     return fig
 
 
+def _create_empty_chart(base_title: str, location_value: str | None = None) -> Figure:
+    """Create empty chart with 'no data' message."""
+    fig = Figure()
+    title = _build_title(base_title, location_value)
+    fig.update_layout(
+        title=title,
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        annotations=[
+            dict(
+                text="No data available",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+                font=dict(size=16),
+            )
+        ],
+    )
+    return fig
+
+
 def _build_title(
     base_title: str,
     location_value: str | None = None,
@@ -263,6 +288,9 @@ def plot_daily_cases(
     df = _prepare_data(df, date_col, location_col, location_value)
 
     end_date = df[date_col].max()
+    if pd.isna(end_date):
+        return _create_empty_chart(f"Daily Cases - Last {days} Days", location_value)
+
     start_date = end_date - timedelta(days=days)
     df_filtered = _filter_by_date_range(df, date_col, start_date, end_date)
 
@@ -296,6 +324,11 @@ def plot_monthly_cases(
     df = _prepare_data(df, date_col, location_col, location_value)
 
     end_date = df[date_col].max()
+    if pd.isna(end_date):
+        return _create_empty_chart(
+            f"Monthly Cases - Last {months} Months", location_value
+        )
+
     start_date = end_date - pd.DateOffset(months=months)
     df_filtered = _filter_by_date_range(df, date_col, start_date, end_date)
 
@@ -305,7 +338,7 @@ def plot_monthly_cases(
     return _create_bar_chart(monthly_counts, "ano_mes", "casos", title)
 
 
-def plot_daily_cases_by_date_range(
+def plot_daily_range(
     df: pd.DataFrame,
     start_date: pd.Timestamp,
     end_date: pd.Timestamp,
@@ -341,7 +374,7 @@ def plot_daily_cases_by_date_range(
     return _create_line_chart(daily_counts, date_col, "casos", title)
 
 
-def plot_monthly_cases_by_date_range(
+def plot_monthly_range(
     df: pd.DataFrame,
     start_date: pd.Timestamp,
     end_date: pd.Timestamp,
@@ -388,66 +421,6 @@ def plot_monthly_cases_by_date_range(
 
     title = _build_title(
         f"Monthly Cases - {start_month_name}/{start_date.year} to {end_month_name}/{end_date.year}",
-        location_value,
-    )
-
-    return _create_bar_chart(monthly_counts, "ano_mes", "casos", title)
-
-
-def plot_monthly_cases_by_year_month(
-    df: pd.DataFrame,
-    year: int,
-    month: int,
-    date_col: str = "DT_SIN_PRI",
-    location_col: str | None = None,
-    location_value: str | None = None,
-) -> Figure:
-    """
-    Generate monthly cases chart for a specific year and month.
-
-    Args:
-        df: DataFrame with case data
-        year: Year to filter
-        month: Month to filter (1-12)
-        date_col: Name of date column (default: "DT_SIN_PRI")
-        location_col: Optional location column name (e.g., "SG_UF_NOT")
-        location_value: Optional location value to filter
-
-    Returns:
-        Plotly figure object.
-
-    """
-    df = _prepare_data(df, date_col, location_col, location_value)
-
-    start_date = pd.Timestamp(year=year, month=month, day=1)
-    if month == 12:
-        end_date = pd.Timestamp(year=year + 1, month=1, day=1) - pd.Timedelta(days=1)
-    else:
-        end_date = pd.Timestamp(year=year, month=month + 1, day=1) - pd.Timedelta(
-            days=1
-        )
-
-    df_filtered = _filter_by_date_range(df, date_col, start_date, end_date)
-    monthly_counts = _aggregate_monthly(df_filtered, date_col)
-
-    month_names = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-    ]
-    month_name = month_names[month - 1]
-
-    title = _build_title(
-        f"Monthly Cases - {month_name}/{year}",
         location_value,
     )
 

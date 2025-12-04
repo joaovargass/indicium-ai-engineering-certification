@@ -1,7 +1,6 @@
 """Dash application for interactive SRAG charts."""
 
 from datetime import date, timedelta
-from pathlib import Path
 
 import dash
 import dash_bootstrap_components as dbc
@@ -10,50 +9,13 @@ from dash import Input, Output, dcc, html
 from plotly.graph_objects import Figure
 
 from charts.charts import (
-    plot_daily_cases_by_date_range,
+    plot_daily_range,
     plot_monthly_cases,
-    plot_monthly_cases_by_date_range,
+    plot_monthly_range,
 )
-from elt.load import read_from_dw
+from elt.load import load_srag_data
 
 DATE_COL = "DT_SIN_PRI"
-
-
-def load_data() -> pd.DataFrame:
-    """
-    Load data with caching: try local cache first, then DW if needed.
-
-    On first run, loads from DW and saves to local cache.
-    On subsequent runs, loads from local cache if available.
-
-    Returns:
-        DataFrame with SRAG data.
-
-    Raises:
-        RuntimeError: If neither cache nor DW data is available.
-
-    """
-    project_root = Path(__file__).resolve().parent.parent.parent
-    cache_dir = project_root / "data" / "cleaned"
-    cache_path = cache_dir / "dash_cache.parquet"
-
-    # Try to load from cache first
-    if cache_path.exists():
-        return pd.read_parquet(cache_path)
-
-    # Cache not found, try to load from DW
-    try:
-        df = read_from_dw()
-    except Exception as e:
-        raise RuntimeError(
-            f"Failed to load data from DW and no cache found: {e}"
-        ) from e
-
-    # Save to cache for next time
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(cache_path, index=False)
-
-    return df
 
 
 def _create_error_figure(message: str, title: str) -> Figure:
@@ -284,7 +246,7 @@ def _update_daily_chart(
     location_col = "SG_UF_NOT" if uf_value != "all" else None
     location_value = uf_value if uf_value != "all" else None
 
-    return plot_daily_cases_by_date_range(
+    return plot_daily_range(
         df_filtered,
         start_date=start_date,
         end_date=end_date,
@@ -308,9 +270,9 @@ def _validate_monthly_period(
 
     start_date = pd.Timestamp(year=int(start_year), month=int(start_month), day=1)
     if int(end_month) == 12:
-        end_date = pd.Timestamp(
-            year=int(end_year) + 1, month=1, day=1
-        ) - pd.Timedelta(days=1)
+        end_date = pd.Timestamp(year=int(end_year) + 1, month=1, day=1) - pd.Timedelta(
+            days=1
+        )
     else:
         end_date = pd.Timestamp(
             year=int(end_year), month=int(end_month) + 1, day=1
@@ -392,7 +354,7 @@ def _update_monthly_chart(
             "No Data Available",
         )
 
-    return plot_monthly_cases_by_date_range(
+    return plot_monthly_range(
         df_filtered,
         start_date=start_date,
         end_date=end_date,
@@ -446,9 +408,7 @@ def _register_callbacks(app: dash.Dash) -> None:
             Input("monthly-end-year", "value"),
             Input("monthly-end-month", "value"),
         ],
-    )(
-        lambda uf, sy, sm, ey, em: _update_monthly_chart(app, uf, sy, sm, ey, em)
-    )
+    )(lambda uf, sy, sm, ey, em: _update_monthly_chart(app, uf, sy, sm, ey, em))
 
 
 def create_app() -> dash.Dash:
@@ -456,7 +416,7 @@ def create_app() -> dash.Dash:
     app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
     try:
-        df = load_data()
+        df = load_srag_data()
         df[DATE_COL] = pd.to_datetime(df[DATE_COL], errors="coerce")
     except Exception as e:
         raise RuntimeError(f"Failed to load data: {e}") from e
