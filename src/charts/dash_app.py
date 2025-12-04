@@ -5,8 +5,9 @@ from pathlib import Path
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import dcc, html, Input, Output
 import pandas as pd
+from dash import Input, Output, dcc, html
+from plotly.graph_objects import Figure
 
 from charts.charts import (
     plot_daily_cases_by_date_range,
@@ -14,7 +15,6 @@ from charts.charts import (
     plot_monthly_cases_by_date_range,
 )
 from elt.load import read_from_dw
-from plotly.graph_objects import Figure
 
 DATE_COL = "DT_SIN_PRI"
 
@@ -126,7 +126,9 @@ def _create_layout(
         [
             dbc.Row(
                 dbc.Col(
-                    html.H1("SRAG - Interactive Dashboard", className="text-center mb-4"),
+                    html.H1(
+                        "SRAG - Interactive Dashboard", className="text-center mb-4"
+                    ),
                 )
             ),
             dbc.Row(
@@ -137,9 +139,8 @@ def _create_layout(
                             html.Label("Filter by State:", className="fw-bold mb-2"),
                             dcc.Dropdown(
                                 id="daily-uf-filter",
-                                options=[{"label": "All", "value": "all"}] + [
-                                    {"label": uf, "value": uf} for uf in available_ufs
-                                ],
+                                options=[{"label": "All", "value": "all"}]
+                                + [{"label": uf, "value": uf} for uf in available_ufs],
                                 value="all",
                                 clearable=False,
                             ),
@@ -176,17 +177,18 @@ def _create_layout(
                             html.Label("Filter by State:", className="fw-bold mb-2"),
                             dcc.Dropdown(
                                 id="monthly-uf-filter",
-                                options=[{"label": "All", "value": "all"}] + [
-                                    {"label": uf, "value": uf} for uf in available_ufs
-                                ],
+                                options=[{"label": "All", "value": "all"}]
+                                + [{"label": uf, "value": uf} for uf in available_ufs],
                                 value="all",
                                 clearable=False,
                             ),
                             html.Label("Start Year:", className="fw-bold mb-2 mt-3"),
                             dcc.Dropdown(
                                 id="monthly-start-year",
-                                options=[{"label": "Last 12 Months", "value": "all"}] + [
-                                    {"label": str(year), "value": year} for year in available_years
+                                options=[{"label": "Last 12 Months", "value": "all"}]
+                                + [
+                                    {"label": str(year), "value": year}
+                                    for year in available_years
                                 ],
                                 value="all",
                                 clearable=False,
@@ -194,15 +196,18 @@ def _create_layout(
                             html.Label("Start Month:", className="fw-bold mb-2 mt-3"),
                             dcc.Dropdown(
                                 id="monthly-start-month",
-                                options=[{"label": "All", "value": "all"}] + month_options,
+                                options=[{"label": "All", "value": "all"}]
+                                + month_options,
                                 value="all",
                                 clearable=False,
                             ),
                             html.Label("End Year:", className="fw-bold mb-2 mt-3"),
                             dcc.Dropdown(
                                 id="monthly-end-year",
-                                options=[{"label": "All", "value": "all"}] + [
-                                    {"label": str(year), "value": year} for year in available_years
+                                options=[{"label": "All", "value": "all"}]
+                                + [
+                                    {"label": str(year), "value": year}
+                                    for year in available_years
                                 ],
                                 value="all",
                                 clearable=False,
@@ -210,7 +215,8 @@ def _create_layout(
                             html.Label("End Month:", className="fw-bold mb-2 mt-3"),
                             dcc.Dropdown(
                                 id="monthly-end-month",
-                                options=[{"label": "All", "value": "all"}] + month_options,
+                                options=[{"label": "All", "value": "all"}]
+                                + month_options,
                                 value="all",
                                 clearable=False,
                             ),
@@ -231,6 +237,170 @@ def _create_layout(
     )
 
 
+def _validate_daily_dates(start_date_str: str, end_date_str: str) -> str:
+    """Ensure start date is before end date."""
+    if not start_date_str or not end_date_str:
+        return end_date_str
+
+    start_date = pd.to_datetime(start_date_str)
+    end_date = pd.to_datetime(end_date_str)
+
+    if start_date >= end_date:
+        # Adjust end date to be one day after start date
+        return (start_date + pd.Timedelta(days=1)).date()
+
+    return end_date_str
+
+
+def _update_daily_chart(
+    app: dash.Dash, uf_value: str, start_date_str: str, end_date_str: str
+) -> Figure:
+    """Update daily chart based on filters."""
+    df_filtered = app.df.copy()
+
+    if uf_value != "all":
+        df_filtered = df_filtered[df_filtered["SG_UF_NOT"] == uf_value].copy()
+
+    start_date = pd.to_datetime(start_date_str)
+    end_date = pd.to_datetime(end_date_str)
+
+    # Validate: start_date must be < end_date
+    if start_date >= end_date:
+        return _create_error_figure(
+            "Start date must be before end date",
+            "Error: Invalid Date Range",
+        )
+
+    # Check if there is data in the selected period
+    date_filtered = df_filtered[
+        (df_filtered[DATE_COL] >= start_date) & (df_filtered[DATE_COL] <= end_date)
+    ]
+    if len(date_filtered) == 0:
+        return _create_error_figure(
+            "No data available for the selected period",
+            "No Data Available",
+        )
+
+    location_col = "SG_UF_NOT" if uf_value != "all" else None
+    location_value = uf_value if uf_value != "all" else None
+
+    return plot_daily_cases_by_date_range(
+        df_filtered,
+        start_date=start_date,
+        end_date=end_date,
+        location_col=location_col,
+        location_value=location_value,
+    )
+
+
+def _validate_monthly_period(
+    start_year: str | int,
+    start_month: str | int,
+    end_year: str | int,
+    end_month: str | int,
+) -> tuple[str | int, str | int]:
+    """Ensure start period is before end period."""
+    if start_year == "all" or start_month == "all":
+        return end_year, end_month
+
+    if end_year == "all" or end_month == "all":
+        return end_year, end_month
+
+    start_date = pd.Timestamp(year=int(start_year), month=int(start_month), day=1)
+    if int(end_month) == 12:
+        end_date = pd.Timestamp(
+            year=int(end_year) + 1, month=1, day=1
+        ) - pd.Timedelta(days=1)
+    else:
+        end_date = pd.Timestamp(
+            year=int(end_year), month=int(end_month) + 1, day=1
+        ) - pd.Timedelta(days=1)
+
+    if start_date >= end_date:
+        # Adjust end to be one month after start
+        if int(start_month) == 12:
+            adjusted_year = int(start_year) + 1
+            adjusted_month = 1
+        else:
+            adjusted_year = int(start_year)
+            adjusted_month = int(start_month) + 1
+        return adjusted_year, adjusted_month
+
+    return end_year, end_month
+
+
+def _update_monthly_chart(
+    app: dash.Dash,
+    uf_value: str,
+    start_year: str | int,
+    start_month: str | int,
+    end_year: str | int,
+    end_month: str | int,
+) -> Figure:
+    """Update monthly chart based on filters."""
+    df_filtered = app.df.copy()
+
+    if uf_value != "all":
+        df_filtered = df_filtered[df_filtered["SG_UF_NOT"] == uf_value].copy()
+
+    location_col = "SG_UF_NOT" if uf_value != "all" else None
+    location_value = uf_value if uf_value != "all" else None
+
+    # If start year is "all", show last 12 months
+    if start_year == "all":
+        if len(df_filtered) == 0:
+            return _create_error_figure("No data available", "No Data Available")
+        return plot_monthly_cases(
+            df_filtered,
+            location_col=location_col,
+            location_value=location_value,
+            months=12,
+        )
+
+    # Calculate start date (first day of start month/year)
+    start_date = pd.Timestamp(year=int(start_year), month=int(start_month), day=1)
+
+    # Calculate end date (last day of end month/year)
+    if end_year == "all" or end_month == "all":
+        # If end is "all", use max date from data
+        end_date = df_filtered[DATE_COL].max()
+    else:
+        # Last day of the end month
+        if int(end_month) == 12:
+            end_date = pd.Timestamp(
+                year=int(end_year) + 1, month=1, day=1
+            ) - pd.Timedelta(days=1)
+        else:
+            end_date = pd.Timestamp(
+                year=int(end_year), month=int(end_month) + 1, day=1
+            ) - pd.Timedelta(days=1)
+
+    # Validate: start_date must be < end_date
+    if start_date >= end_date:
+        return _create_error_figure(
+            "Start period must be before end period",
+            "Error: Invalid Period Range",
+        )
+
+    # Check if there is data in the selected period
+    date_filtered = df_filtered[
+        (df_filtered[DATE_COL] >= start_date) & (df_filtered[DATE_COL] <= end_date)
+    ]
+    if len(date_filtered) == 0:
+        return _create_error_figure(
+            "No data available for the selected period",
+            "No Data Available",
+        )
+
+    return plot_monthly_cases_by_date_range(
+        df_filtered,
+        start_date=start_date,
+        end_date=end_date,
+        location_col=location_col,
+        location_value=location_value,
+    )
+
+
 def _register_callbacks(app: dash.Dash) -> None:
     """
     Register Dash callbacks for chart updates.
@@ -239,72 +409,22 @@ def _register_callbacks(app: dash.Dash) -> None:
         app: Dash application instance.
 
     """
-    @app.callback(
+    app.callback(
         Output("daily-end-date", "date"),
         Input("daily-start-date", "date"),
         Input("daily-end-date", "date"),
-    )
-    def validate_daily_dates(start_date_str: str, end_date_str: str):
-        """Ensure start date is before end date."""
-        if not start_date_str or not end_date_str:
-            return end_date_str
+    )(_validate_daily_dates)
 
-        start_date = pd.to_datetime(start_date_str)
-        end_date = pd.to_datetime(end_date_str)
-
-        if start_date >= end_date:
-            # Adjust end date to be one day after start date
-            return (start_date + pd.Timedelta(days=1)).date()
-
-        return end_date_str
-
-    @app.callback(
+    app.callback(
         Output("daily-chart", "figure"),
         [
             Input("daily-uf-filter", "value"),
             Input("daily-start-date", "date"),
             Input("daily-end-date", "date"),
         ],
-    )
-    def update_daily_chart(uf_value: str, start_date_str: str, end_date_str: str):
-        """Update daily chart based on filters."""
-        df_filtered = app.df.copy()
+    )(lambda uf, start, end: _update_daily_chart(app, uf, start, end))
 
-        if uf_value != "all":
-            df_filtered = df_filtered[df_filtered["SG_UF_NOT"] == uf_value].copy()
-
-        start_date = pd.to_datetime(start_date_str)
-        end_date = pd.to_datetime(end_date_str)
-
-        # Validate: start_date must be < end_date
-        if start_date >= end_date:
-            return _create_error_figure(
-                "Start date must be before end date",
-                "Error: Invalid Date Range",
-            )
-
-        # Check if there is data in the selected period
-        date_filtered = df_filtered[
-            (df_filtered[DATE_COL] >= start_date) & (df_filtered[DATE_COL] <= end_date)
-        ]
-        if len(date_filtered) == 0:
-            return _create_error_figure(
-                "No data available for the selected period",
-                "No Data Available",
-            )
-
-        location_col = "SG_UF_NOT" if uf_value != "all" else None
-        location_value = uf_value if uf_value != "all" else None
-
-        return plot_daily_cases_by_date_range(
-            df_filtered,
-            start_date=start_date,
-            end_date=end_date,
-            location_col=location_col,
-            location_value=location_value,
-        )
-
-    @app.callback(
+    app.callback(
         [
             Output("monthly-end-year", "value"),
             Output("monthly-end-month", "value"),
@@ -315,39 +435,9 @@ def _register_callbacks(app: dash.Dash) -> None:
             Input("monthly-end-year", "value"),
             Input("monthly-end-month", "value"),
         ],
-    )
-    def validate_monthly_period(
-        start_year: str | int,
-        start_month: str | int,
-        end_year: str | int,
-        end_month: str | int,
-    ):
-        """Ensure start period is before end period."""
-        if start_year == "all" or start_month == "all":
-            return end_year, end_month
+    )(_validate_monthly_period)
 
-        if end_year == "all" or end_month == "all":
-            return end_year, end_month
-
-        start_date = pd.Timestamp(year=int(start_year), month=int(start_month), day=1)
-        if int(end_month) == 12:
-            end_date = pd.Timestamp(year=int(end_year) + 1, month=1, day=1) - pd.Timedelta(days=1)
-        else:
-            end_date = pd.Timestamp(year=int(end_year), month=int(end_month) + 1, day=1) - pd.Timedelta(days=1)
-
-        if start_date >= end_date:
-            # Adjust end to be one month after start
-            if int(start_month) == 12:
-                adjusted_year = int(start_year) + 1
-                adjusted_month = 1
-            else:
-                adjusted_year = int(start_year)
-                adjusted_month = int(start_month) + 1
-            return adjusted_year, adjusted_month
-
-        return end_year, end_month
-
-    @app.callback(
+    app.callback(
         Output("monthly-chart", "figure"),
         [
             Input("monthly-uf-filter", "value"),
@@ -356,72 +446,9 @@ def _register_callbacks(app: dash.Dash) -> None:
             Input("monthly-end-year", "value"),
             Input("monthly-end-month", "value"),
         ],
+    )(
+        lambda uf, sy, sm, ey, em: _update_monthly_chart(app, uf, sy, sm, ey, em)
     )
-    def update_monthly_chart(
-        uf_value: str,
-        start_year: str | int,
-        start_month: str | int,
-        end_year: str | int,
-        end_month: str | int,
-    ):
-        """Update monthly chart based on filters."""
-        df_filtered = app.df.copy()
-
-        if uf_value != "all":
-            df_filtered = df_filtered[df_filtered["SG_UF_NOT"] == uf_value].copy()
-
-        location_col = "SG_UF_NOT" if uf_value != "all" else None
-        location_value = uf_value if uf_value != "all" else None
-
-        # If start year is "all", show last 12 months
-        if start_year == "all":
-            if len(df_filtered) == 0:
-                return _create_error_figure("No data available", "No Data Available")
-            return plot_monthly_cases(
-                df_filtered,
-                location_col=location_col,
-                location_value=location_value,
-                months=12,
-            )
-
-        # Calculate start date (first day of start month/year)
-        start_date = pd.Timestamp(year=int(start_year), month=int(start_month), day=1)
-
-        # Calculate end date (last day of end month/year)
-        if end_year == "all" or end_month == "all":
-            # If end is "all", use max date from data
-            end_date = df_filtered[DATE_COL].max()
-        else:
-            # Last day of the end month
-            if int(end_month) == 12:
-                end_date = pd.Timestamp(year=int(end_year) + 1, month=1, day=1) - pd.Timedelta(days=1)
-            else:
-                end_date = pd.Timestamp(year=int(end_year), month=int(end_month) + 1, day=1) - pd.Timedelta(days=1)
-
-        # Validate: start_date must be < end_date
-        if start_date >= end_date:
-            return _create_error_figure(
-                "Start period must be before end period",
-                "Error: Invalid Period Range",
-            )
-
-        # Check if there is data in the selected period
-        date_filtered = df_filtered[
-            (df_filtered[DATE_COL] >= start_date) & (df_filtered[DATE_COL] <= end_date)
-        ]
-        if len(date_filtered) == 0:
-            return _create_error_figure(
-                "No data available for the selected period",
-                "No Data Available",
-            )
-
-        return plot_monthly_cases_by_date_range(
-            df_filtered,
-            start_date=start_date,
-            end_date=end_date,
-            location_col=location_col,
-            location_value=location_value,
-        )
 
 
 def create_app() -> dash.Dash:
@@ -443,7 +470,11 @@ def create_app() -> dash.Dash:
     available_months = list(range(1, 13))
 
     app.layout = _create_layout(
-        available_ufs, start_date_default, end_date_default, available_years, available_months
+        available_ufs,
+        start_date_default,
+        end_date_default,
+        available_years,
+        available_months,
     )
     app.df = df
 
@@ -460,4 +491,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

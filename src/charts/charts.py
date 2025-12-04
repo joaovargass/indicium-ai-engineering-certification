@@ -370,8 +370,18 @@ def plot_monthly_cases_by_date_range(
     monthly_counts = _aggregate_monthly(df_filtered, date_col)
 
     month_names = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
     ]
     start_month_name = month_names[start_date.month - 1]
     end_month_name = month_names[end_date.month - 1]
@@ -413,14 +423,26 @@ def plot_monthly_cases_by_year_month(
     if month == 12:
         end_date = pd.Timestamp(year=year + 1, month=1, day=1) - pd.Timedelta(days=1)
     else:
-        end_date = pd.Timestamp(year=year, month=month + 1, day=1) - pd.Timedelta(days=1)
+        end_date = pd.Timestamp(year=year, month=month + 1, day=1) - pd.Timedelta(
+            days=1
+        )
 
     df_filtered = _filter_by_date_range(df, date_col, start_date, end_date)
     monthly_counts = _aggregate_monthly(df_filtered, date_col)
 
     month_names = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
     ]
     month_name = month_names[month - 1]
 
