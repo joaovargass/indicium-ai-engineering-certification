@@ -9,13 +9,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_PATH = PROJECT_ROOT / "src"
 sys.path.insert(0, str(SRC_PATH))
 
-from common.config import FULL_REFRESH, PRIMARY_KEY_FIELD, RESET
-from elt.extract import (
+from common.config import FULL_REFRESH, PRIMARY_KEY_FIELD, RESET  # noqa: E402
+from elt.extract import (  # noqa: E402
     extract_data,
     fetch_web_dates,
     setup_dirs,
 )
-from elt.load import (
+from elt.load import (  # noqa: E402
     download_unprocessed_deltas,
     get_client,
     load_dw_state,
@@ -27,7 +27,7 @@ from elt.load import (
     upload_congelado_delta,
     upload_vivo_delta,
 )
-from elt.transform import clean_data, select_essential
+from elt.transform import clean_data, select_essential  # noqa: E402
 
 
 def _run_extract(
@@ -141,7 +141,7 @@ def _run_transform(local_temp_dir: Path) -> None:
 
     client = get_client()
     combined_df, delta_files = download_unprocessed_deltas(client, local_temp_dir)
-    
+
     # Get state info after download (avoids duplicate load_dw_state call)
     dw_state = load_dw_state(client)
     print(f"DW state: {len(dw_state.get('processed_deltas', []))} deltas processed")
