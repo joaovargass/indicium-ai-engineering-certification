@@ -164,7 +164,8 @@ def _run_transform(local_temp_dir: Path) -> None:
         df_cleaned[PRIMARY_KEY_FIELD] = pd.to_numeric(
             df_cleaned[PRIMARY_KEY_FIELD], errors="coerce"
         )
-        max_notific = int(df_cleaned[PRIMARY_KEY_FIELD].max())
+        max_val = df_cleaned[PRIMARY_KEY_FIELD].max()
+        max_notific = int(max_val) if pd.notna(max_val) else 0
     else:
         max_notific = 0
 

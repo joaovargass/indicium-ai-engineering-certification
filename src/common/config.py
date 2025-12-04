@@ -93,3 +93,91 @@ COVID_VACCINE_DATE_COLS = [
 
 # Azure Data Warehouse configuration
 DW_FULLY_QUALIFIED_TABLE = "dbo.srag_cleaned"
+
+# Brazilian states (UF codes) - All 27 states
+BRAZILIAN_STATES = [
+    "AC",  # Acre
+    "AL",  # Alagoas
+    "AP",  # Amapá
+    "AM",  # Amazonas
+    "BA",  # Bahia
+    "CE",  # Ceará
+    "DF",  # Distrito Federal
+    "ES",  # Espírito Santo
+    "GO",  # Goiás
+    "MA",  # Maranhão
+    "MT",  # Mato Grosso
+    "MS",  # Mato Grosso do Sul
+    "MG",  # Minas Gerais
+    "PA",  # Pará
+    "PB",  # Paraíba
+    "PR",  # Paraná
+    "PE",  # Pernambuco
+    "PI",  # Piauí
+    "RJ",  # Rio de Janeiro
+    "RN",  # Rio Grande do Norte
+    "RS",  # Rio Grande do Sul
+    "RO",  # Rondônia
+    "RR",  # Roraima
+    "SC",  # Santa Catarina
+    "SP",  # São Paulo
+    "SE",  # Sergipe
+    "TO",  # Tocantins
+]
+
+# Health-related keywords for news search enhancement (Portuguese)
+HEALTH_KEYWORDS_PT = [
+    "saúde",
+    "SRAG",
+    "gripe",
+    "influenza",
+    "surto",
+    "epidemia",
+    "pandemia",
+    "casos",
+    "mortes",
+    "óbitos",
+    "hospitalização",
+    "internação",
+    "UTI",
+    "unidade de terapia intensiva",
+    "vacinação",
+    "vacina",
+    "COVID-19",
+    "COVID",
+    "coronavírus",
+    "síndrome respiratória",
+    "doença respiratória",
+    "vírus respiratório",
+    "gripe aviária",
+    "H5N1",
+    "H1N1",
+    "notificação",
+    "vigilância epidemiológica",
+    "Ministério da Saúde",
+    "DATASUS",
+]
+
+# Health-related keywords for news search enhancement (English)
+HEALTH_KEYWORDS_EN = [
+    "health",
+    "outbreak",
+    "epidemic",
+    "pandemic",
+    "cases",
+    "deaths",
+    "hospitalization",
+    "ICU",
+    "intensive care",
+    "vaccination",
+    "vaccine",
+    "COVID-19",
+    "coronavirus",
+    "respiratory syndrome",
+    "respiratory disease",
+    "respiratory virus",
+    "avian flu",
+    "H5N1",
+    "H1N1",
+    "epidemiological surveillance",
+]

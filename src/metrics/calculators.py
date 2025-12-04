@@ -21,6 +21,7 @@ def _filter_by_location(
 
     Returns:
         Filtered DataFrame.
+
     """
     if location_col and location_value:
         if location_col not in df.columns:
@@ -39,6 +40,7 @@ def _get_date_column(df: pd.DataFrame, preferred: str = "DT_SIN_PRI") -> str | N
 
     Returns:
         Column name if available, None otherwise.
+
     """
     if preferred in df.columns and df[preferred].notna().any():
         return preferred
@@ -53,6 +55,7 @@ def calculate_case_increase_rate(
     location_col: str | None = None,
     location_value: str | None = None,
     date_col: str | None = None,
+    reporting_lag_days: int = 7,
 ) -> dict[str, Any]:
     """
     Calculate case increase rate comparing current period vs previous period.
@@ -63,6 +66,7 @@ def calculate_case_increase_rate(
         location_col: Optional location column name for filtering
         location_value: Optional location value to filter
         date_col: Optional date column name (auto-detected if None)
+        reporting_lag_days: Days to exclude from end to account for reporting lag (default: 7)
 
     Returns:
         Dictionary with:
@@ -74,6 +78,7 @@ def calculate_case_increase_rate(
         - previous_period_start: Start date of previous period
         - previous_period_end: End date of previous period
         - metadata: Additional information
+
     """
     df = _filter_by_location(df, location_col, location_value)
 
@@ -108,7 +113,9 @@ def calculate_case_increase_rate(
             "metadata": {"error": "No valid date records found"},
         }
 
-    end_date = df[date_col].max().normalize()
+    # Use reporting lag offset to exclude incomplete recent data
+    data_max_date = df[date_col].max().normalize()
+    end_date = data_max_date - timedelta(days=reporting_lag_days)
     current_start = end_date - timedelta(days=period_days - 1)
     previous_end = current_start - timedelta(days=1)
     previous_start = previous_end - timedelta(days=period_days - 1)
@@ -157,6 +164,7 @@ def calculate_mortality_rate(
         - total_deaths: Number of deaths (EVOLUCAO = 2 or 3)
         - total_cases: Total cases with defined evolution (excluding ignored)
         - metadata: Additional information
+
     """
     df = _filter_by_location(df, location_col, location_value)
 
@@ -209,7 +217,6 @@ def calculate_icu_occupancy_rate(
     location_col: str | None = None,
     location_value: str | None = None,
     total_icu_beds: int | None = None,
-    use_mock_data: bool = True,
     lookback_days: int = 90,
 ) -> dict[str, Any]:
     """
@@ -219,16 +226,17 @@ def calculate_icu_occupancy_rate(
         df: DataFrame with case data
         location_col: Optional location column name for filtering
         location_value: Optional location value to filter
-        total_icu_beds: Optional total ICU beds (if None and use_mock_data=True, uses mock)
-        use_mock_data: If True and total_icu_beds is None, uses mock data
+        total_icu_beds: Optional total ICU beds (if None, fetches from CNES)
         lookback_days: Number of days to look back for ICU admissions (default: 90)
 
     Returns:
         Dictionary with:
         - occupancy_rate: Percentage of ICU beds occupied (float or None)
         - patients_in_icu: Number of patients currently in ICU
-        - total_icu_beds: Total ICU beds (from parameter or mock)
-        - metadata: Additional information including data source
+        - total_icu_beds: Total ICU beds (from parameter or CNES)
+        - data_source: Source of ICU bed data
+        - metadata: Additional information
+
     """
     df = _filter_by_location(df, location_col, location_value)
 
@@ -239,10 +247,13 @@ def calculate_icu_occupancy_rate(
             "occupancy_rate": None,
             "patients_in_icu": 0,
             "total_icu_beds": None,
+            "data_source": None,
             "metadata": {"error": f"Missing required columns: {missing_cols}"},
         }
 
-    df = df[required_cols + (["DT_SAIDUTI"] if "DT_SAIDUTI" in df.columns else [])].copy()
+    df = df[
+        required_cols + (["DT_SAIDUTI"] if "DT_SAIDUTI" in df.columns else [])
+    ].copy()
 
     df = df.dropna(subset=["UTI"])
     df["UTI"] = df["UTI"].astype(str).str.strip()
@@ -253,16 +264,21 @@ def calculate_icu_occupancy_rate(
         return {
             "occupancy_rate": None,
             "patients_in_icu": 0,
-            "total_icu_beds": total_icu_beds if total_icu_beds is not None else None,
+            "total_icu_beds": total_icu_beds,
+            "data_source": None,
             "metadata": {"warning": "No ICU patients found"},
         }
 
     if "DT_ENTUTI" in icu_patients.columns:
-        icu_patients["DT_ENTUTI"] = pd.to_datetime(icu_patients["DT_ENTUTI"], errors="coerce")
+        icu_patients["DT_ENTUTI"] = pd.to_datetime(
+            icu_patients["DT_ENTUTI"], errors="coerce"
+        )
         icu_patients = icu_patients.dropna(subset=["DT_ENTUTI"])
 
     if "DT_SAIDUTI" in icu_patients.columns:
-        icu_patients["DT_SAIDUTI"] = pd.to_datetime(icu_patients["DT_SAIDUTI"], errors="coerce")
+        icu_patients["DT_SAIDUTI"] = pd.to_datetime(
+            icu_patients["DT_SAIDUTI"], errors="coerce"
+        )
 
     current_date = pd.Timestamp.now().normalize()
     cutoff_date = current_date - timedelta(days=lookback_days)
@@ -280,19 +296,19 @@ def calculate_icu_occupancy_rate(
 
     patients_count = len(currently_in_icu)
 
-    if total_icu_beds is None and use_mock_data:
-        mock_beds = _get_mock_icu_beds(location_value)
-        total_icu_beds = mock_beds
-        metadata = {
-            "data_source": "mock",
-            "note": "Using mock ICU bed data. Replace with real data source.",
-        }
-    elif total_icu_beds is not None:
-        metadata = {"data_source": "provided"}
+    # Get ICU bed data from CNES if not provided
+    data_source = None
+    if total_icu_beds is None:
+        total_icu_beds, data_source = _get_icu_beds_from_cnes(
+            location_col, location_value
+        )
+
+    if total_icu_beds is not None:
+        metadata = {"data_source": data_source or "provided"}
     else:
         metadata = {
             "data_source": "none",
-            "note": "No ICU bed data provided. Returning absolute count only.",
+            "note": "ICU bed data not available for this location.",
         }
 
     if total_icu_beds is not None and total_icu_beds > 0:
@@ -304,23 +320,39 @@ def calculate_icu_occupancy_rate(
         "occupancy_rate": occupancy_rate,
         "patients_in_icu": int(patients_count),
         "total_icu_beds": total_icu_beds,
+        "data_source": data_source,
         "metadata": metadata,
     }
 
 
-def _get_mock_icu_beds(location_value: str | None = None) -> int:
+def _get_icu_beds_from_cnes(
+    location_col: str | None,
+    location_value: str | None,
+) -> tuple[int | None, str | None]:
     """
-    Get mock ICU bed count for testing purposes.
+    Get ICU bed count from CNES data.
 
     Args:
-        location_value: Optional location identifier
+        location_col: Location column name (SG_UF_NOT or CO_MUN_NOT)
+        location_value: Location value (UF code or city code)
 
     Returns:
-        Mock ICU bed count.
+        Tuple of (bed_count, source_description).
+
     """
-    if location_value:
-        return 500
-    return 10000
+    try:
+        from retrieval.icu_beds import get_icu_beds_for_location
+
+        if location_col == "SG_UF_NOT":
+            return get_icu_beds_for_location(uf=location_value)
+        elif location_col == "CO_MUN_NOT":
+            return get_icu_beds_for_location(city_code=location_value)
+        else:
+            # National data
+            return get_icu_beds_for_location()
+    except Exception as e:
+        print(f"Warning: Could not get ICU beds from CNES: {e}")
+        return None, None
 
 
 def calculate_vaccination_rate(
@@ -346,6 +378,7 @@ def calculate_vaccination_rate(
         - flu_vaccinated: Number vaccinated against flu
         - total_cases: Total cases analyzed
         - metadata: Additional information
+
     """
     df = _filter_by_location(df, location_col, location_value)
 
@@ -386,7 +419,9 @@ def calculate_vaccination_rate(
                 total_covid = len(covid_df)
                 covid_rate = (covid_vaccinated / total_covid) * 100
                 metadata["covid_total"] = int(total_covid)
-                metadata["covid_ignored"] = int((df["VACINA_COV"].astype(str).str.strip() == "9").sum())
+                metadata["covid_ignored"] = int(
+                    (df["VACINA_COV"].astype(str).str.strip() == "9").sum()
+                )
 
     if calculate_flu and "VACINA" in df.columns:
         flu_df = df[["VACINA"]].dropna()
@@ -398,7 +433,9 @@ def calculate_vaccination_rate(
                 total_flu = len(flu_df)
                 flu_rate = (flu_vaccinated / total_flu) * 100
                 metadata["flu_total"] = int(total_flu)
-                metadata["flu_ignored"] = int((df["VACINA"].astype(str).str.strip() == "9").sum())
+                metadata["flu_ignored"] = int(
+                    (df["VACINA"].astype(str).str.strip() == "9").sum()
+                )
 
     total_cases = max(
         metadata.get("covid_total", 0),
@@ -413,4 +450,3 @@ def calculate_vaccination_rate(
         "total_cases": int(total_cases) if total_cases > 0 else 0,
         "metadata": metadata,
     }
-

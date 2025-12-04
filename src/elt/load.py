@@ -311,7 +311,8 @@ def upload_congelado_delta(
 
     if PRIMARY_KEY_FIELD in df.columns:
         df[PRIMARY_KEY_FIELD] = pd.to_numeric(df[PRIMARY_KEY_FIELD], errors="coerce")
-        max_notific = int(df[PRIMARY_KEY_FIELD].max())
+        max_val = df[PRIMARY_KEY_FIELD].max()
+        max_notific = int(max_val) if pd.notna(max_val) else 0
     else:
         max_notific = 0
 
@@ -369,11 +370,11 @@ def upload_vivo_delta(
     filename = _generate_delta_filename(year, date_str)
     azure_path = f"{RAW_DELTAS_DIR}/{filename}"
 
-    max_notific = (
-        int(new_records[PRIMARY_KEY_FIELD].max())
-        if PRIMARY_KEY_FIELD in new_records.columns
-        else 0
-    )
+    if PRIMARY_KEY_FIELD in new_records.columns:
+        max_val = new_records[PRIMARY_KEY_FIELD].max()
+        max_notific = int(max_val) if pd.notna(max_val) else 0
+    else:
+        max_notific = 0
 
     _upload_parquet(client, new_records, azure_path, local_temp_dir)
 
@@ -527,6 +528,30 @@ def read_from_dw(
 
     engine.dispose()
     print(f"Loaded {len(df):,} rows")
+    return df
+
+
+def load_srag_data() -> pd.DataFrame:
+    """Load SRAG data from cache or DW. Raises RuntimeError if unavailable."""
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parent.parent.parent
+    cache_dir = project_root / "data" / "cleaned"
+    cache_path = cache_dir / "dash_cache.parquet"
+
+    if cache_path.exists():
+        return pd.read_parquet(cache_path)
+
+    try:
+        df = read_from_dw()
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load data from DW and no cache found: {e}"
+        ) from e
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(cache_path, index=False)
+
     return df
 
 
