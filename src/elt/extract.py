@@ -12,6 +12,8 @@ from common.config import (
     BASE_DOWNLOAD_URL,
     DOWNLOAD_ENABLED,
     OPENDATASUS_URL,
+    REQUEST_HEAD_TIMEOUT_SECONDS,
+    REQUEST_TIMEOUT_SECONDS,
     START_YEAR,
 )
 
@@ -23,7 +25,7 @@ def get_dates(page_url: str, only_live: bool = False) -> tuple[str | None, str |
     date_pattern = r"\d{2}/\d{2}/\d{4}"
 
     try:
-        response = requests.get(page_url, timeout=600)
+        response = requests.get(page_url, timeout=REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
 
@@ -62,11 +64,13 @@ def get_dates(page_url: str, only_live: bool = False) -> tuple[str | None, str |
     return freeze_date_str, live_date_str
 
 
-def _download_file(url: str, file_path: Path, timeout: int = 600) -> bool:
+def _download_file(
+    url: str, file_path: Path, timeout: int = REQUEST_TIMEOUT_SECONDS
+) -> bool:
     """Download a file from URL with streaming."""
     session = requests.Session()
     try:
-        head = session.head(url, timeout=30)
+        head = session.head(url, timeout=REQUEST_HEAD_TIMEOUT_SECONDS)
         if head.status_code != 200:
             print(f"File not found: {url}")
             return False

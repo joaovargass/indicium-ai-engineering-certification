@@ -4,6 +4,7 @@ import pandas as pd
 
 from common.config import (
     CATEGORICAL_VALIDATIONS,
+    COVID_VACCINATION_START_DATE,
     COVID_VACCINE_DATE_COLS,
     DATE_COLUMNS,
     ESSENTIAL_COLUMNS,
@@ -163,7 +164,7 @@ def _impute_vaccine(df: pd.DataFrame) -> pd.DataFrame:
             df.loc[mask, "VACINA_COV"] = "1"
 
     if "VACINA_COV" in df.columns and "DT_NOTIFIC" in df.columns and available:
-        cutoff = pd.Timestamp("2021-01-01")
+        cutoff = pd.Timestamp(COVID_VACCINATION_START_DATE)
         no_evidence = ~df[available].notna().any(axis=1)
         post_era = df["DT_NOTIFIC"] >= cutoff
         mask = df["VACINA_COV"].isna() & no_evidence & post_era

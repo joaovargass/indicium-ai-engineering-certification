@@ -4,19 +4,20 @@ from typing import Annotated, Any
 
 from langchain_core.tools import tool
 
+from common.config import (
+    DEFAULT_LOOKBACK_DAYS,
+    DEFAULT_MONTHS,
+    DEFAULT_PERIOD_DAYS,
+    NO_DATA_MESSAGE_METRICS,
+)
 from elt.load import NoDataAvailableError, load_srag_data
 from metrics.calculators import (
-    calculate_case_increase_rate,
+    calculate_case_growth,
     calculate_icu_occupancy_rate,
     calculate_mortality_rate,
     calculate_vaccination_rate,
 )
 from tools.location_utils import determine_location_filter, get_location_description
-
-NO_DATA_MESSAGE = (
-    "Dados não disponíveis. Por favor, clique no botão 'Atualizar Dados' "
-    "no canto superior direito para carregar os dados do SRAG antes de fazer consultas."
-)
 
 
 def _with_location(uf: str | None, city_code: str | None, result: dict) -> dict:
@@ -28,15 +29,15 @@ def _with_location(uf: str | None, city_code: str | None, result: dict) -> dict:
 def get_case_increase_rate(
     uf: Annotated[str | None, "State code (e.g., 'SP'). None for national."] = None,
     city_code: Annotated[str | None, "IBGE city code. Overrides UF."] = None,
-    period_days: Annotated[int, "Days per period (default: 7)."] = 7,
+    period_days: Annotated[int, "Days per period (default: 7)."] = DEFAULT_PERIOD_DAYS,
 ) -> dict[str, Any]:
     """Calculate case increase rate vs previous period. Use for trends, growth analysis."""
     try:
         df = load_srag_data()
     except NoDataAvailableError:
-        return {"error": NO_DATA_MESSAGE}
+        return {"error": NO_DATA_MESSAGE_METRICS}
     location_col, location_value = determine_location_filter(uf, city_code)
-    result = calculate_case_increase_rate(
+    result = calculate_case_growth(
         df,
         period_days=period_days,
         location_col=location_col,
@@ -49,16 +50,21 @@ def get_case_increase_rate(
 def get_mortality_rate(
     uf: Annotated[str | None, "State code (e.g., 'SP'). None for national."] = None,
     city_code: Annotated[str | None, "IBGE city code. Overrides UF."] = None,
-    lookback_months: Annotated[int | None, "Number of months to look back (default: 12). None for all data."] = 12,
+    lookback_months: Annotated[
+        int | None, "Number of months to look back (default: 12). None for all data."
+    ] = DEFAULT_MONTHS,
 ) -> dict[str, Any]:
     """Calculate mortality rate (deaths/cases). Use for fatality, death rate queries."""
     try:
         df = load_srag_data()
     except NoDataAvailableError:
-        return {"error": NO_DATA_MESSAGE}
+        return {"error": NO_DATA_MESSAGE_METRICS}
     location_col, location_value = determine_location_filter(uf, city_code)
     result = calculate_mortality_rate(
-        df, location_col=location_col, location_value=location_value, lookback_months=lookback_months
+        df,
+        location_col=location_col,
+        location_value=location_value,
+        lookback_months=lookback_months,
     )
     return _with_location(uf, city_code, result)
 
@@ -67,13 +73,15 @@ def get_mortality_rate(
 def get_icu_occupancy_rate(
     uf: Annotated[str | None, "State code (e.g., 'SP'). None for national."] = None,
     city_code: Annotated[str | None, "IBGE city code. Overrides UF."] = None,
-    lookback_days: Annotated[int, "Days to look back (default: 30)."] = 30,
+    lookback_days: Annotated[
+        int, "Days to look back (default: 30)."
+    ] = DEFAULT_LOOKBACK_DAYS,
 ) -> dict[str, Any]:
     """Calculate ICU occupancy rate. Use for hospital capacity queries."""
     try:
         df = load_srag_data()
     except NoDataAvailableError:
-        return {"error": NO_DATA_MESSAGE}
+        return {"error": NO_DATA_MESSAGE_METRICS}
     location_col, location_value = determine_location_filter(uf, city_code)
     result = calculate_icu_occupancy_rate(
         df,
@@ -89,13 +97,15 @@ def get_vaccination_rate(
     uf: Annotated[str | None, "State code (e.g., 'SP'). None for national."] = None,
     city_code: Annotated[str | None, "IBGE city code. Overrides UF."] = None,
     vaccine_type: Annotated[str, "'covid', 'flu', or 'both' (default)."] = "both",
-    lookback_months: Annotated[int | None, "Number of months to look back (default: 12). None for all data."] = 12,
+    lookback_months: Annotated[
+        int | None, "Number of months to look back (default: 12). None for all data."
+    ] = DEFAULT_MONTHS,
 ) -> dict[str, Any]:
     """Calculate vaccination rates. Use for vaccine coverage queries."""
     try:
         df = load_srag_data()
     except NoDataAvailableError:
-        return {"error": NO_DATA_MESSAGE}
+        return {"error": NO_DATA_MESSAGE_METRICS}
     location_col, location_value = determine_location_filter(uf, city_code)
     result = calculate_vaccination_rate(
         df,
