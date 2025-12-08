@@ -231,3 +231,4 @@ __pycache__/
 
 docs
 docs/**
+assets/**/*.png

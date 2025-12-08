@@ -1,0 +1,363 @@
+/* Custom CSS for SRAG Chat Interface */
+
+/* Ensure body doesn't have white background */
+body {
+    background-color: #f8f9fa !important;
+}
+
+
+/* Chat message area styling */
+#chat-messages {
+    scroll-behavior: smooth;
+}
+
+/* Message bubble animations */
+.chat-message-bubble {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* User message styling */
+.user-message {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 18px 18px 4px 18px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Assistant message styling */
+.assistant-message {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 18px 18px 18px 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Input area styling */
+#chat-input {
+    transition: border-color 0.3s ease;
+}
+
+#chat-input:focus {
+    border-color: #667eea !important;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    outline: none;
+}
+
+/* Send button styling - matches user message gradient */
+#chat-send-button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border: none !important;
+    border-radius: 18px !important;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+    height: calc(1.5em + 1.5rem + 2px) !important; /* Match input height: line-height + padding + border */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+#chat-send-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    background: linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%) !important;
+}
+
+#chat-send-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+}
+
+/* Vertical alignment for input row */
+.row.mt-3 {
+    display: flex !important;
+    align-items: center !important;
+}
+
+/* Ensure button column is vertically centered */
+.row.mt-3 > .col-2 {
+    display: flex !important;
+    align-items: center !important;
+}
+
+/* Loading spinner styling - only wrapper is transparent, text box keeps its background */
+#chat-loading-indicator {
+    background: transparent !important;
+    pointer-events: none !important;
+    z-index: 1000 !important;
+}
+
+#chat-loading-indicator > div:first-child {
+    background: transparent !important;
+    pointer-events: auto !important;
+}
+
+
+/* Chart container styling */
+.chat-chart-container {
+    margin-top: 1rem;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Download button styling */
+.download-button-container {
+    margin-top: 0.5rem;
+}
+
+/* Clear button styling - matches assistant message style */
+#chat-clear-button {
+    background: #ffffff !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 18px !important;
+    color: #667eea !important;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: all 0.2s ease;
+}
+
+#chat-clear-button:hover {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border-color: transparent !important;
+    color: #ffffff !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+#chat-clear-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+}
+
+/* Scrollbar styling for message area */
+#chat-messages::-webkit-scrollbar {
+    width: 8px;
+}
+
+#chat-messages::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+#chat-messages::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+#chat-messages::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Responsive adjustments */
+/* For screens smaller than 889px (where 90vw < 800px), make bubbles responsive */
+@media (max-width: 888px) {
+    .user-message,
+    .assistant-message {
+        min-width: 90vw !important;
+        max-width: 90vw !important;
+    }
+}
+
+/* For very small screens, use full width with padding */
+@media (max-width: 600px) {
+    .user-message,
+    .assistant-message {
+        min-width: calc(100vw - 40px) !important;
+        max-width: calc(100vw - 40px) !important;
+    }
+}
+
+/* Tab styling */
+.nav-tabs .nav-link {
+    color: #495057;
+    transition: color 0.2s ease;
+}
+
+.nav-tabs .nav-link:hover {
+    color: #667eea;
+    border-color: transparent;
+}
+
+.nav-tabs .nav-link.active {
+    color: #667eea;
+    border-color: #667eea;
+    font-weight: 600;
+}
+
+/* Animated gradient text for loading indicator */
+.gradient-text {
+  background: linear-gradient(90deg, #667eea, #764ba2, #f093fb, #667eea);
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-wave 3s linear infinite;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  display: inline-block;
+}
+
+@keyframes gradient-wave {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+/* Markdown content styling */
+.markdown-content {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Markdown tables - Enhanced with visible borders and full width */
+.markdown-content table {
+    border-collapse: collapse;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 15px 0;
+    border: 2px solid #667eea;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    background-color: #ffffff;
+}
+
+.markdown-content table thead {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #667eea;
+}
+
+.markdown-content table th,
+.markdown-content table td {
+    border: 1px solid #dee2e6;
+    padding: 12px 15px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.markdown-content table th {
+    background-color: #667eea;
+    color: #ffffff;
+    font-weight: 600;
+    border: 1px solid #5568d3;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+}
+
+.markdown-content table tbody tr {
+    border-bottom: 1px solid #dee2e6;
+}
+
+.markdown-content table tbody tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+.markdown-content table tbody tr:nth-child(odd) {
+    background-color: #ffffff;
+}
+
+.markdown-content table tbody tr:hover {
+    background-color: #e9ecef;
+    transition: background-color 0.2s ease;
+}
+
+.markdown-content table td {
+    border-left: 1px solid #dee2e6;
+    border-right: 1px solid #dee2e6;
+}
+
+.markdown-content table tbody tr:last-child td {
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Markdown code blocks */
+.markdown-content code {
+    background-color: #f4f4f4;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 13px;
+}
+
+.markdown-content pre {
+    background-color: #f4f4f4;
+    padding: 15px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 10px 0;
+}
+
+.markdown-content pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+/* Markdown headers */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    color: #212529;
+}
+
+.markdown-content h1 { font-size: 1.8em; }
+.markdown-content h2 { font-size: 1.5em; }
+.markdown-content h3 { font-size: 1.3em; }
+
+/* Markdown lists */
+.markdown-content ul,
+.markdown-content ol {
+    margin: 0.5em 0;
+    padding-left: 25px;
+}
+
+.markdown-content li {
+    margin: 0.3em 0;
+}
+
+/* Markdown paragraphs */
+.markdown-content p {
+    margin: 0.8em 0;
+}
+
+/* Markdown links */
+.markdown-content a {
+    color: #667eea;
+    text-decoration: none;
+}
+
+.markdown-content a:hover {
+    text-decoration: underline;
+}
+
+/* Markdown blockquotes */
+.markdown-content blockquote {
+    border-left: 4px solid #667eea;
+    padding-left: 15px;
+    margin: 10px 0;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Markdown horizontal rules */
+.markdown-content hr {
+    border: none;
+    border-top: 2px solid #dee2e6;
+    margin: 20px 0;
+}
+

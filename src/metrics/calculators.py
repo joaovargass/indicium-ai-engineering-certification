@@ -133,6 +133,10 @@ def calculate_case_increase_rate(
         rate = ((current_cases - previous_cases) / previous_cases) * 100
         metadata = {}
 
+    # Calculate overall period used (from previous period start to current period end)
+    period_start = previous_start
+    period_end = end_date
+
     return {
         "rate": rate,
         "current_period_cases": int(current_cases),
@@ -141,6 +145,8 @@ def calculate_case_increase_rate(
         "current_period_end": end_date.isoformat(),
         "previous_period_start": previous_start.isoformat(),
         "previous_period_end": previous_end.isoformat(),
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
         "metadata": metadata,
     }
 
@@ -163,6 +169,8 @@ def calculate_mortality_rate(
         - rate: Mortality percentage (float or None)
         - total_deaths: Number of deaths (EVOLUCAO = 2 or 3)
         - total_cases: Total cases with defined evolution (excluding ignored)
+        - period_start: Start date of data period used
+        - period_end: End date of data period used
         - metadata: Additional information
 
     """
@@ -173,8 +181,27 @@ def calculate_mortality_rate(
             "rate": None,
             "total_deaths": 0,
             "total_cases": 0,
+            "period_start": None,
+            "period_end": None,
             "metadata": {"error": "EVOLUCAO column not found"},
         }
+
+    # Get date column for period calculation
+    date_col = _get_date_column(df)
+    if date_col:
+        df_with_dates = df[[date_col, "EVOLUCAO"]].copy()
+        df_with_dates[date_col] = pd.to_datetime(df_with_dates[date_col], errors="coerce")
+        df_with_dates = df_with_dates.dropna(subset=[date_col, "EVOLUCAO"])
+
+        if len(df_with_dates) > 0:
+            period_start = df_with_dates[date_col].min().normalize()
+            period_end = df_with_dates[date_col].max().normalize()
+        else:
+            period_start = None
+            period_end = None
+    else:
+        period_start = None
+        period_end = None
 
     df = df[["EVOLUCAO"]].copy()
     df = df.dropna(subset=["EVOLUCAO"])
@@ -184,6 +211,8 @@ def calculate_mortality_rate(
             "rate": None,
             "total_deaths": 0,
             "total_cases": 0,
+            "period_start": period_start.isoformat() if period_start else None,
+            "period_end": period_end.isoformat() if period_end else None,
             "metadata": {"error": "No records with evolution data"},
         }
 
@@ -208,6 +237,8 @@ def calculate_mortality_rate(
         "rate": rate,
         "total_deaths": int(total_deaths),
         "total_cases": int(total_with_evolution),
+        "period_start": period_start.isoformat() if period_start else None,
+        "period_end": period_end.isoformat() if period_end else None,
         "metadata": metadata,
     }
 
@@ -217,7 +248,7 @@ def calculate_icu_occupancy_rate(
     location_col: str | None = None,
     location_value: str | None = None,
     total_icu_beds: int | None = None,
-    lookback_days: int = 90,
+    lookback_days: int = 30,
 ) -> dict[str, Any]:
     """
     Calculate ICU occupancy rate.
@@ -227,7 +258,7 @@ def calculate_icu_occupancy_rate(
         location_col: Optional location column name for filtering
         location_value: Optional location value to filter
         total_icu_beds: Optional total ICU beds (if None, fetches from CNES)
-        lookback_days: Number of days to look back for ICU admissions (default: 90)
+        lookback_days: Number of days to look back for ICU admissions (default: 30)
 
     Returns:
         Dictionary with:
@@ -281,18 +312,41 @@ def calculate_icu_occupancy_rate(
         )
 
     current_date = pd.Timestamp.now().normalize()
-    cutoff_date = current_date - timedelta(days=lookback_days)
+    
+    # Find the maximum date available in the dataset and calculate period
+    if len(icu_patients) > 0 and "DT_ENTUTI" in icu_patients.columns:
+        data_max_date = icu_patients["DT_ENTUTI"].max().normalize()
+        data_min_date = icu_patients["DT_ENTUTI"].min().normalize()
+        
+        # Use the last available date in the dataset (or today if data is more recent)
+        period_end = min(data_max_date, current_date)
+        
+        # Calculate desired period start: last 30 days available (inclusive, so -29 days)
+        desired_period_start = period_end - timedelta(days=lookback_days - 1)
+        
+        # Adjust period_start if dataset doesn't have enough days
+        # Use the maximum of desired_start and actual min_date to ensure we use all available data
+        period_start = max(desired_period_start, data_min_date)
+        
+        period_limited_by_data = period_end < current_date or period_start > desired_period_start
+    else:
+        # Fallback: use current date if no data
+        period_end = current_date
+        period_start = current_date - timedelta(days=lookback_days - 1)
+        period_limited_by_data = False
 
+    # Filter patients: currently in ICU (no exit date or exit date in future) 
+    # AND entered ICU within the calculated period
     if "DT_SAIDUTI" in icu_patients.columns:
         currently_in_icu = icu_patients[
             (
                 (icu_patients["DT_SAIDUTI"].isna())
                 | (icu_patients["DT_SAIDUTI"] > current_date)
             )
-            & (icu_patients["DT_ENTUTI"] >= cutoff_date)
+            & (icu_patients["DT_ENTUTI"] >= period_start)
         ]
     else:
-        currently_in_icu = icu_patients[icu_patients["DT_ENTUTI"] >= cutoff_date]
+        currently_in_icu = icu_patients[icu_patients["DT_ENTUTI"] >= period_start]
 
     patients_count = len(currently_in_icu)
 
@@ -310,6 +364,15 @@ def calculate_icu_occupancy_rate(
             "data_source": "none",
             "note": "ICU bed data not available for this location.",
         }
+    
+    # Add information about period limitation
+    if period_limited_by_data:
+        actual_days = (period_end - period_start).days + 1
+        metadata["period_limited_by_data"] = True
+        metadata["requested_lookback_days"] = lookback_days
+        metadata["actual_period_days"] = actual_days
+        metadata["data_max_date"] = period_end.isoformat()
+        metadata["current_date"] = current_date.isoformat()
 
     if total_icu_beds is not None and total_icu_beds > 0:
         occupancy_rate = (patients_count / total_icu_beds) * 100
@@ -320,6 +383,9 @@ def calculate_icu_occupancy_rate(
         "occupancy_rate": occupancy_rate,
         "patients_in_icu": int(patients_count),
         "total_icu_beds": total_icu_beds,
+        "lookback_days": lookback_days,
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
         "data_source": data_source,
         "metadata": metadata,
     }
@@ -377,6 +443,8 @@ def calculate_vaccination_rate(
         - covid_vaccinated: Number vaccinated against COVID-19
         - flu_vaccinated: Number vaccinated against flu
         - total_cases: Total cases analyzed
+        - period_start: Start date of data period used
+        - period_end: End date of data period used
         - metadata: Additional information
 
     """
@@ -398,8 +466,33 @@ def calculate_vaccination_rate(
             "covid_vaccinated": 0,
             "flu_vaccinated": 0,
             "total_cases": 0,
+            "period_start": None,
+            "period_end": None,
             "metadata": {"error": "No vaccination columns found"},
         }
+
+    # Get date column for period calculation
+    date_col = _get_date_column(df)
+    if date_col:
+        df_with_dates = df[[date_col] + cols_to_keep].copy()
+        df_with_dates[date_col] = pd.to_datetime(df_with_dates[date_col], errors="coerce")
+        df_with_dates = df_with_dates.dropna(subset=[date_col])
+
+        # Filter to only rows with vaccination data
+        if calculate_covid and "VACINA_COV" in df_with_dates.columns:
+            df_with_dates = df_with_dates.dropna(subset=["VACINA_COV"])
+        if calculate_flu and "VACINA" in df_with_dates.columns:
+            df_with_dates = df_with_dates.dropna(subset=["VACINA"])
+
+        if len(df_with_dates) > 0:
+            period_start = df_with_dates[date_col].min().normalize()
+            period_end = df_with_dates[date_col].max().normalize()
+        else:
+            period_start = None
+            period_end = None
+    else:
+        period_start = None
+        period_end = None
 
     df = df[cols_to_keep].copy()
 
@@ -448,5 +541,7 @@ def calculate_vaccination_rate(
         "covid_vaccinated": int(covid_vaccinated),
         "flu_vaccinated": int(flu_vaccinated),
         "total_cases": int(total_cases) if total_cases > 0 else 0,
+        "period_start": period_start.isoformat() if period_start else None,
+        "period_end": period_end.isoformat() if period_end else None,
         "metadata": metadata,
     }

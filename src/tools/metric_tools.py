@@ -55,7 +55,7 @@ def get_mortality_rate(
 def get_icu_occupancy_rate(
     uf: Annotated[str | None, "State code (e.g., 'SP'). None for national."] = None,
     city_code: Annotated[str | None, "IBGE city code. Overrides UF."] = None,
-    lookback_days: Annotated[int, "Days to look back (default: 90)."] = 90,
+    lookback_days: Annotated[int, "Days to look back (default: 30)."] = 30,
 ) -> dict[str, Any]:
     """Calculate ICU occupancy rate. Use for hospital capacity queries."""
     df = load_srag_data()

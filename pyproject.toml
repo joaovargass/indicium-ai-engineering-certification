@@ -61,6 +61,7 @@ dependencies = [
   "azure-ai-ml",
   "sqlalchemy",
   "pyodbc",
+  "kaleido>=1.2.0",
 ]
 
 # *********************************************
