@@ -1,9 +1,11 @@
 """Chart generation module for SRAG data visualization."""
 
 from datetime import timedelta
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
+import plotly.io as pio
 from plotly.graph_objects import Figure
 
 # Professional color palette (colorblind-friendly)
@@ -13,6 +15,23 @@ CHART_COLOR = "#2E86AB"
 def figure_to_json(fig: Figure) -> str:
     """Convert Plotly Figure to JSON string."""
     return fig.to_json()
+
+
+def figure_to_image_file(fig: Figure, file_path: Path, width: int = 1200, height: int = 600) -> Path:
+    """
+    Save Plotly figure as PNG image file.
+
+    Args:
+        fig: Plotly Figure object
+        file_path: Path where to save the image
+        width: Image width in pixels (default: 1200)
+        height: Image height in pixels (default: 600)
+
+    Returns:
+        Path to saved image file
+    """
+    pio.write_image(fig, str(file_path), format="png", width=width, height=height)
+    return file_path
 
 
 def _prepare_data(
@@ -114,6 +133,8 @@ def _create_line_chart(
     x_col: str,
     y_col: str,
     title: str,
+    x_axis_label: str | None = None,
+    y_axis_label: str | None = None,
 ) -> Figure:
     """
     Create a line chart with standard styling.
@@ -123,6 +144,8 @@ def _create_line_chart(
         x_col: Column name for x-axis
         y_col: Column name for y-axis
         title: Chart title
+        x_axis_label: Optional custom x-axis label
+        y_axis_label: Optional custom y-axis label
 
     Returns:
         Plotly figure object.
@@ -140,12 +163,12 @@ def _create_line_chart(
     fig.update_traces(
         line=dict(width=3),
         marker=dict(size=7, line=dict(width=1, color="white")),
-        hovertemplate="<b>%{x|%d/%m/%Y}</b><br>Cases: %{y:,.0f}<extra></extra>",
+        hovertemplate="<b>%{x|%d/%m/%Y}</b><br>%{y:,.0f}<extra></extra>",
     )
 
     fig.update_layout(
-        xaxis_title="Date",
-        yaxis_title="Number of Cases",
+        xaxis_title=x_axis_label or "Data",
+        yaxis_title=y_axis_label or "Número de Casos",
         height=600,
         margin=dict(l=60, r=40, t=80, b=60),
         title_font=dict(size=20),
@@ -171,6 +194,8 @@ def _create_bar_chart(
     x_col: str,
     y_col: str,
     title: str,
+    x_axis_label: str | None = None,
+    y_axis_label: str | None = None,
 ) -> Figure:
     """
     Create a bar chart with standard styling.
@@ -180,6 +205,8 @@ def _create_bar_chart(
         x_col: Column name for x-axis
         y_col: Column name for y-axis
         title: Chart title
+        x_axis_label: Optional custom x-axis label
+        y_axis_label: Optional custom y-axis label
 
     Returns:
         Plotly figure object.
@@ -195,13 +222,13 @@ def _create_bar_chart(
     )
 
     fig.update_traces(
-        hovertemplate="<b>%{x|%b/%Y}</b><br>Cases: %{y:,.0f}<extra></extra>",
+        hovertemplate="<b>%{x|%b/%Y}</b><br>%{y:,.0f}<extra></extra>",
         marker=dict(line=dict(width=0)),
     )
 
     fig.update_layout(
-        xaxis_title="Month",
-        yaxis_title="Number of Cases",
+        xaxis_title=x_axis_label or "Mês",
+        yaxis_title=y_axis_label or "Número de Casos",
         height=600,
         margin=dict(l=60, r=40, t=80, b=60),
         title_font=dict(size=20),
@@ -233,7 +260,7 @@ def _create_empty_chart(base_title: str, location_value: str | None = None) -> F
         yaxis=dict(visible=False),
         annotations=[
             dict(
-                text="No data available",
+                text="Dados não disponíveis",
                 x=0.5,
                 y=0.5,
                 showarrow=False,
@@ -270,6 +297,9 @@ def plot_daily_cases(
     location_col: str | None = None,
     location_value: str | None = None,
     days: int = 30,
+    title: str | None = None,
+    x_axis_label: str | None = None,
+    y_axis_label: str | None = None,
 ) -> Figure:
     """
     Generate daily cases chart for specified number of days.
@@ -280,6 +310,9 @@ def plot_daily_cases(
         location_col: Optional location column name (e.g., "SG_UF_NOT")
         location_value: Optional location value to filter
         days: Number of days to display (default: 30)
+        title: Optional custom chart title
+        x_axis_label: Optional custom x-axis label
+        y_axis_label: Optional custom y-axis label
 
     Returns:
         Plotly figure object.
@@ -289,15 +322,17 @@ def plot_daily_cases(
 
     end_date = df[date_col].max()
     if pd.isna(end_date):
-        return _create_empty_chart(f"Daily Cases - Last {days} Days", location_value)
+        default_title = title or f"Casos Diários - Últimos {days} Dias"
+        return _create_empty_chart(default_title, location_value)
 
     start_date = end_date - timedelta(days=days)
     df_filtered = _filter_by_date_range(df, date_col, start_date, end_date)
 
     daily_counts = _aggregate_daily(df_filtered, date_col)
-    title = _build_title(f"Daily Cases - Last {days} Days", location_value)
+    chart_title = title or f"Casos Diários - Últimos {days} Dias"
+    chart_title = _build_title(chart_title, location_value)
 
-    return _create_line_chart(daily_counts, date_col, "casos", title)
+    return _create_line_chart(daily_counts, date_col, "casos", chart_title, x_axis_label, y_axis_label)
 
 
 def plot_monthly_cases(
@@ -306,6 +341,9 @@ def plot_monthly_cases(
     location_col: str | None = None,
     location_value: str | None = None,
     months: int = 12,
+    title: str | None = None,
+    x_axis_label: str | None = None,
+    y_axis_label: str | None = None,
 ) -> Figure:
     """
     Generate monthly cases chart for specified number of months.
@@ -316,6 +354,9 @@ def plot_monthly_cases(
         location_col: Optional location column name (e.g., "SG_UF_NOT")
         location_value: Optional location value to filter
         months: Number of months to display (default: 12)
+        title: Optional custom chart title
+        x_axis_label: Optional custom x-axis label
+        y_axis_label: Optional custom y-axis label
 
     Returns:
         Plotly figure object.
@@ -325,17 +366,26 @@ def plot_monthly_cases(
 
     end_date = df[date_col].max()
     if pd.isna(end_date):
-        return _create_empty_chart(
-            f"Monthly Cases - Last {months} Months", location_value
-        )
+        default_title = title or f"Casos Mensais - Últimos {months} Meses"
+        return _create_empty_chart(default_title, location_value)
 
-    start_date = end_date - pd.DateOffset(months=months)
+    # Find the minimum date available in the dataset
+    data_min_date = df[date_col].min()
+    
+    # Calculate desired period: last N months from the maximum available date
+    desired_start_date = end_date - pd.DateOffset(months=months)
+    
+    # Adjust start_date if dataset doesn't have enough months
+    # Use the maximum of desired_start and actual min_date to ensure we use all available data
+    start_date = max(desired_start_date, data_min_date)
+    
     df_filtered = _filter_by_date_range(df, date_col, start_date, end_date)
 
     monthly_counts = _aggregate_monthly(df_filtered, date_col)
-    title = _build_title(f"Monthly Cases - Last {months} Months", location_value)
+    chart_title = title or f"Casos Mensais - Últimos {months} Meses"
+    chart_title = _build_title(chart_title, location_value)
 
-    return _create_bar_chart(monthly_counts, "ano_mes", "casos", title)
+    return _create_bar_chart(monthly_counts, "ano_mes", "casos", chart_title, x_axis_label, y_axis_label)
 
 
 def plot_daily_range(
@@ -367,7 +417,7 @@ def plot_daily_range(
     daily_counts = _aggregate_daily(df_filtered, date_col)
     days = (end_date - start_date).days
     title = _build_title(
-        f"Daily Cases - {start_date.strftime('%d/%m/%Y')} to {end_date.strftime('%d/%m/%Y')} ({days} days)",
+        f"Casos Diários - {start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')} ({days} dias)",
         location_value,
     )
 
@@ -404,23 +454,23 @@ def plot_monthly_range(
 
     month_names = [
         "Jan",
-        "Feb",
+        "Fev",
         "Mar",
-        "Apr",
-        "May",
+        "Abr",
+        "Mai",
         "Jun",
         "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
+        "Ago",
+        "Set",
+        "Out",
         "Nov",
-        "Dec",
+        "Dez",
     ]
     start_month_name = month_names[start_date.month - 1]
     end_month_name = month_names[end_date.month - 1]
 
     title = _build_title(
-        f"Monthly Cases - {start_month_name}/{start_date.year} to {end_month_name}/{end_date.year}",
+        f"Casos Mensais - {start_month_name}/{start_date.year} a {end_month_name}/{end_date.year}",
         location_value,
     )
 

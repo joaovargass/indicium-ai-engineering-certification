@@ -1,13 +1,11 @@
 """Comprehensive tests for report generation tools."""
 
-import os
+# Add src to path
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# Add src to path
-import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_PATH = PROJECT_ROOT / "src"
@@ -142,7 +140,7 @@ class TestGenerateDownloadReport:
         mock_save.return_value = mock_file_path
 
         # Test with all sections disabled
-        result = generate_download_report.invoke(
+        generate_download_report.invoke(
             {
                 "uf": "SP",
                 "include_executive_summary": False,
@@ -202,7 +200,7 @@ class TestGenerateDownloadReport:
         mock_file_path.stat.return_value = mock_stat
         mock_save.return_value = mock_file_path
 
-        result = generate_download_report.invoke(
+        generate_download_report.invoke(
             {"uf": "SP", "days": 30, "months": 12, "include_charts": True}
         )
 
@@ -262,7 +260,7 @@ class TestGenerateDownloadReport:
         mock_file_path.stat.return_value = mock_stat
         mock_save.return_value = mock_file_path
 
-        result = generate_download_report.invoke(
+        generate_download_report.invoke(
             {"city_code": "3550308", "days": 30, "months": 12}
         )
 
@@ -299,8 +297,7 @@ class TestGenerateDownloadReport:
             "vaccination": {"covid_rate": 71.2, "flu_rate": 45.2},
         }
         mock_fetch_news.return_value = [
-            {"title": f"News {i}", "url": f"https://example.com/{i}"}
-            for i in range(5)
+            {"title": f"News {i}", "url": f"https://example.com/{i}"} for i in range(5)
         ]
         mock_summary.return_value = "Resumo"
         mock_metrics_table.return_value = "Tabela"
@@ -316,7 +313,7 @@ class TestGenerateDownloadReport:
         mock_file_path.stat.return_value = mock_stat
         mock_save.return_value = mock_file_path
 
-        result = generate_download_report.invoke(
+        generate_download_report.invoke(
             {"uf": "SP", "max_news": 3, "include_news": True}
         )
 
@@ -418,9 +415,7 @@ class TestGenerateChatReport:
         mock_daily_chart.invoke.return_value = '{"type": "scatter"}'
         mock_monthly_chart.invoke.return_value = '{"type": "bar"}'
 
-        result = generate_chat_report.invoke(
-            {"uf": "SP", "days": 30, "months": 12}
-        )
+        result = generate_chat_report.invoke({"uf": "SP", "days": 30, "months": 12})
 
         # Verify charts were generated
         assert mock_daily_chart.invoke.called
@@ -524,14 +519,16 @@ class TestEdgeCases:
 
     @patch("tools.reports._fetch_all_metrics")
     @patch("tools.reports.validate_report_request")
-    def test_generate_download_report_metrics_error(self, mock_validate, mock_fetch_metrics):
+    def test_generate_download_report_metrics_error(
+        self, mock_validate, mock_fetch_metrics
+    ):
         """Test handling of metrics fetch error."""
         mock_validate.return_value = (True, "")
         mock_fetch_metrics.side_effect = Exception("Metrics error")
 
         # Should raise exception or return error
-        with pytest.raises(Exception):
-            result = generate_download_report.invoke({"uf": "SP"})
+        with pytest.raises(Exception, match="Metrics error"):
+            generate_download_report.invoke({"uf": "SP"})
 
     @patch("tools.reports.validate_report_request")
     def test_generate_download_report_validation_error(self, mock_validate):
@@ -675,4 +672,3 @@ class TestParameterCombinations:
         assert call_kwargs["include_metrics"] == include_met
         assert call_kwargs["include_charts"] == include_chart
         assert call_kwargs["include_news"] == include_news
-

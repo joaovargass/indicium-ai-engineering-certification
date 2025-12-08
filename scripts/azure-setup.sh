@@ -7,13 +7,61 @@ if [[ "${1:-}" == "--reset" ]]; then
   RESET=true
 fi
 
-if [ ! -f .env ]; then
-  echo ".env file not found. Create a .env file with SUBSCRIPTION_ID."
+# Load environment variables if present (do not hard-fail if missing)
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
+
+# Ensure Azure CLI is logged in; fallback to az login if needed
+ACCOUNT_SHOW=$(az account show --output json 2>/dev/null || true)
+if [ -z "$ACCOUNT_SHOW" ]; then
+  echo "Not logged in to Azure CLI. Starting interactive login..."
+  az login >/dev/null
+  ACCOUNT_SHOW=$(az account show --output json 2>/dev/null || true)
+  if [ -z "$ACCOUNT_SHOW" ]; then
+    echo "ERROR: Unable to log in to Azure CLI. Please run 'az login' and retry."
+    exit 1
+  fi
+fi
+
+# Determine subscription and tenant
+DEFAULT_SUBSCRIPTION_ID=$(echo "$ACCOUNT_SHOW" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data.get('id',''))" 2>/dev/null || echo "")
+DEFAULT_TENANT_ID=$(echo "$ACCOUNT_SHOW" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data.get('tenantId',''))" 2>/dev/null || echo "")
+
+SUBSCRIPTION_ID="${SUBSCRIPTION_ID:-$DEFAULT_SUBSCRIPTION_ID}"
+
+if [ -z "$SUBSCRIPTION_ID" ]; then
+  echo "ERROR: No subscription found in Azure CLI and none provided in .env."
+  echo "Please create/assign a subscription in the Azure Portal and rerun."
   exit 1
 fi
 
-source .env
-: "${SUBSCRIPTION_ID:?SUBSCRIPTION_ID is not set in .env}"
+# Validate the subscription exists for the current login
+SUBSCRIPTION_ROW=$(az account list --query "[?id=='$SUBSCRIPTION_ID'].[id,tenantId]" -o tsv 2>/dev/null || true)
+if [ -z "$SUBSCRIPTION_ROW" ]; then
+  echo "ERROR: Subscription '$SUBSCRIPTION_ID' not available for the current login."
+  echo "Run 'az login' with the correct account/tenant or update SUBSCRIPTION_ID in .env."
+  exit 1
+fi
+
+TENANT_ID=$(echo "$SUBSCRIPTION_ROW" | awk '{print $2}')
+TENANT_ID="${TENANT_ID:-$DEFAULT_TENANT_ID}"
+
+echo "Using subscription: $SUBSCRIPTION_ID (tenant: ${TENANT_ID:-unknown})"
+az account set --subscription "$SUBSCRIPTION_ID"
+
+# Register required resource providers if not already registered
+echo "Ensuring required resource providers are registered..."
+REQUIRED_PROVIDERS=("Microsoft.Storage" "Microsoft.Synapse" "Microsoft.Sql")
+for provider in "${REQUIRED_PROVIDERS[@]}"; do
+  STATE=$(az provider show --namespace "$provider" --query "registrationState" -o tsv 2>/dev/null || echo "NotRegistered")
+  if [ "$STATE" != "Registered" ]; then
+    echo "Registering provider: $provider"
+    az provider register --namespace "$provider" --wait >/dev/null 2>&1 || echo "Warning: Could not register $provider (may already be in progress)"
+  fi
+done
 
 LOCATION="brazilsouth"
 RESOURCE_GROUP="ai-engineering"
@@ -45,10 +93,16 @@ if [ "$RESET" = true ]; then
   exit 0
 fi
 
-STORAGE_ACCOUNT_NAME="desafioai"
+STORAGE_ACCOUNT_BASE="desafioai"
+STORAGE_ACCOUNT_NAME="${AZURE_STORAGE_ACCOUNT_NAME:-}"
 FILE_SYSTEM_NAME="desafio-ai"
 DIRECTORIES=("raw" "processed" "outputs")
-SYNAPSE_WORKSPACE_NAME="${AZURE_SYNAPSE_WORKSPACE_NAME:-desafio-synapse}"
+
+# Generate unique suffix based on subscription ID (consistent across runs)
+UNIQUE_SUFFIX=$(echo "$SUBSCRIPTION_ID" | md5sum | cut -c1-6)
+
+SYNAPSE_WORKSPACE_BASE="desafiosynapse"
+SYNAPSE_WORKSPACE_NAME="${AZURE_SYNAPSE_WORKSPACE_NAME:-}"
 SQL_POOL_NAME="${AZURE_SQL_POOL_NAME:-desafiodw}"
 # Use DW100c for Free Trial compatibility (lowest cost)
 SQL_POOL_PERFORMANCE_LEVEL="${AZURE_SQL_POOL_PERFORMANCE_LEVEL:-DW100c}"
@@ -64,13 +118,30 @@ else
   echo "Resource Group '$RESOURCE_GROUP' already exists, skipping creation."
 fi
 
-# Check if Storage Account exists
-EXISTING_SA=$(az storage account list \
+# Check if Storage Account exists in our subscription (any resource group)
+if [ -z "$STORAGE_ACCOUNT_NAME" ]; then
+  EXISTING_SA=$(az storage account list \
+    --subscription "$SUBSCRIPTION_ID" \
+    --query "[?starts_with(name, '$STORAGE_ACCOUNT_BASE')].{name:name, rg:resourceGroup}" \
+    -o tsv 2>/dev/null | head -1)
+  
+  if [ -n "$EXISTING_SA" ]; then
+    STORAGE_ACCOUNT_NAME=$(echo "$EXISTING_SA" | awk '{print $1}')
+    EXISTING_RG_SA=$(echo "$EXISTING_SA" | awk '{print $2}')
+    echo "Found existing Storage Account '$STORAGE_ACCOUNT_NAME' in resource group '$EXISTING_RG_SA'."
+  else
+    STORAGE_ACCOUNT_NAME="${STORAGE_ACCOUNT_BASE}${UNIQUE_SUFFIX}"
+  fi
+fi
+
+# Check if this specific storage account exists in our resource group
+EXISTING_SA_IN_RG=$(az storage account list \
   --resource-group "$RESOURCE_GROUP" \
+  --subscription "$SUBSCRIPTION_ID" \
   --query "[?name=='$STORAGE_ACCOUNT_NAME'].name" \
   -o tsv 2>/dev/null || echo "")
 
-if [ -z "$EXISTING_SA" ]; then
+if [ -z "$EXISTING_SA_IN_RG" ]; then
   echo "Creating Storage Account: $STORAGE_ACCOUNT_NAME"
   az storage account create \
     --name "$STORAGE_ACCOUNT_NAME" \
@@ -81,6 +152,7 @@ if [ -z "$EXISTING_SA" ]; then
     --enable-hierarchical-namespace true \
     --min-tls-version TLS1_2 \
     --allow-blob-public-access false \
+    --subscription "$SUBSCRIPTION_ID" \
     >/dev/null
 else
   echo "Storage Account '$STORAGE_ACCOUNT_NAME' already exists, skipping creation."
@@ -219,6 +291,21 @@ else
 fi
 
 # Azure Synapse Analytics Configuration
+
+# Determine Synapse Workspace name (check for existing or generate unique)
+if [ -z "$SYNAPSE_WORKSPACE_NAME" ]; then
+  EXISTING_SYNAPSE=$(az synapse workspace list \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "[?starts_with(name, '$SYNAPSE_WORKSPACE_BASE')].name" \
+    -o tsv 2>/dev/null | head -1)
+  
+  if [ -n "$EXISTING_SYNAPSE" ]; then
+    SYNAPSE_WORKSPACE_NAME="$EXISTING_SYNAPSE"
+    echo "Found existing Synapse Workspace: $SYNAPSE_WORKSPACE_NAME"
+  else
+    SYNAPSE_WORKSPACE_NAME="${SYNAPSE_WORKSPACE_BASE}${UNIQUE_SUFFIX}"
+  fi
+fi
 
 # Check if Synapse Workspace already exists first (needed for credential handling)
 EXISTING_WORKSPACE=$(az synapse workspace show \
@@ -388,32 +475,42 @@ if [ -n "$AZURE_SQL_ADMIN_USER" ]; then
     fi
   fi
 
-  # Try to load existing Storage Key and SAS Token from secrets
-  STORAGE_KEY="${AZURE_STORAGE_KEY:-}"
-  SAS_TOKEN="${AZURE_STORAGE_SAS_TOKEN:-}"
-  
-  if [ -z "$STORAGE_KEY" ] && [ -f "$SECRETS_FILE" ]; then
-    STORAGE_KEY=$(grep "^AZURE_STORAGE_KEY=" "$SECRETS_FILE" 2>/dev/null | cut -d'=' -f2- || echo "")
-  fi
-  if [ -z "$SAS_TOKEN" ] && [ -f "$SECRETS_FILE" ]; then
-    SAS_TOKEN=$(grep "^AZURE_STORAGE_SAS_TOKEN=" "$SECRETS_FILE" 2>/dev/null | cut -d'=' -f2- || echo "")
+  # Check if stored credentials match current storage account
+  STORED_SA_NAME=""
+  if [ -f "$SECRETS_FILE" ]; then
+    STORED_SA_NAME=$(grep "^STORAGE_ACCOUNT_NAME=" "$SECRETS_FILE" 2>/dev/null | cut -d'=' -f2- || echo "")
   fi
   
-  # Get Storage Key if not already available
+  # Only reuse credentials if storage account name matches
+  STORAGE_KEY=""
+  SAS_TOKEN=""
+  if [ "$STORED_SA_NAME" = "$STORAGE_ACCOUNT_NAME" ]; then
+    STORAGE_KEY="${AZURE_STORAGE_KEY:-}"
+    SAS_TOKEN="${AZURE_STORAGE_SAS_TOKEN:-}"
+    if [ -z "$STORAGE_KEY" ] && [ -f "$SECRETS_FILE" ]; then
+      STORAGE_KEY=$(grep "^AZURE_STORAGE_KEY=" "$SECRETS_FILE" 2>/dev/null | cut -d'=' -f2- || echo "")
+    fi
+    if [ -z "$SAS_TOKEN" ] && [ -f "$SECRETS_FILE" ]; then
+      SAS_TOKEN=$(grep "^AZURE_STORAGE_SAS_TOKEN=" "$SECRETS_FILE" 2>/dev/null | cut -d'=' -f2- || echo "")
+    fi
+  fi
+  
+  # Always get fresh Storage Key for the current storage account
   if [ -z "$STORAGE_KEY" ]; then
-    echo "Retrieving Storage Account key..."
+    echo "Retrieving Storage Account key for $STORAGE_ACCOUNT_NAME..."
     STORAGE_KEY=$(az storage account keys list \
       --account-name "$STORAGE_ACCOUNT_NAME" \
       --resource-group "$RESOURCE_GROUP" \
+      --subscription "$SUBSCRIPTION_ID" \
       --query "[0].value" \
       -o tsv 2>/dev/null || echo "")
   else
     echo "Using existing Storage Account key from secrets."
   fi
   
-  # Generate SAS token only if not already available or if empty
+  # Always generate fresh SAS token for the current storage account
   if [ -z "$SAS_TOKEN" ]; then
-    echo "Generating SAS token for bulk data operations..."
+    echo "Generating SAS token for $STORAGE_ACCOUNT_NAME..."
     SAS_EXPIRY=$(date -u -v+1y '+%Y-%m-%dT%H:%MZ' 2>/dev/null || date -u -d '+1 year' '+%Y-%m-%dT%H:%MZ' 2>/dev/null || echo "2026-01-01T00:00Z")
     
     if [ -n "$STORAGE_KEY" ]; then
@@ -491,9 +588,10 @@ echo "AZURE CREDENTIALS"
 echo "=================="
 echo "Add these to your .env file:"
 echo
+echo "SUBSCRIPTION_ID=${SUBSCRIPTION_ID}"
+echo "AZURE_TENANT_ID=${TENANT_ID}"
 echo "AZURE_CLIENT_ID=${CLIENT_ID}"
 echo "AZURE_CLIENT_SECRET=${CLIENT_SECRET}"
-echo "AZURE_TENANT_ID=${TENANT_ID}"
 echo "STORAGE_ACCOUNT_NAME=${STORAGE_ACCOUNT_NAME}"
 echo "AZURE_SYNAPSE_WORKSPACE_NAME=${SYNAPSE_WORKSPACE_NAME}"
 echo "AZURE_SQL_POOL_NAME=${SQL_POOL_NAME}"
@@ -522,6 +620,7 @@ TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
   echo "# Generated on: ${TIMESTAMP}"
   echo "# WARNING: This file contains sensitive information. Do not commit to git."
   echo
+  echo "SUBSCRIPTION_ID=${SUBSCRIPTION_ID}"
   echo "AZURE_CLIENT_ID=${CLIENT_ID}"
   echo "AZURE_CLIENT_SECRET=${CLIENT_SECRET}"
   echo "AZURE_TENANT_ID=${TENANT_ID}"
