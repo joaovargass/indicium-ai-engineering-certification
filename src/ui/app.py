@@ -5,9 +5,12 @@ import sys
 import uuid
 from pathlib import Path
 
+import diskcache
+from datetime import datetime
+
 import dash
 import dash_bootstrap_components as dbc
-from dash import Input, Output, State, callback_context, html, clientside_callback
+from dash import DiskcacheManager, Input, Output, State, callback_context, clientside_callback, html
 from dash.exceptions import PreventUpdate
 from plotly.graph_objects import Figure
 
@@ -19,6 +22,8 @@ if str(SRC_PATH) not in sys.path:
 
 from agent import invoke_agent  # noqa: E402
 from agent.graph import _convert_ui_messages_to_langchain  # noqa: E402
+from elt.load import get_last_extraction_date  # noqa: E402
+from elt.pipeline import run_incremental_elt  # noqa: E402
 from ui.components.chat_components import (  # noqa: E402
     WELCOME_MESSAGE,
     create_chat_layout,
@@ -29,6 +34,52 @@ from ui.components.chat_components import (  # noqa: E402
 
 # Shared state for loading step updates
 _current_loading_step = {"step": "Pensando..."}
+
+# Server-side ELT status cache (persists across page reloads)
+_elt_status_cache_dir = PROJECT_ROOT / ".cache" / "elt_status"
+_elt_status_cache_dir.mkdir(parents=True, exist_ok=True)
+_elt_status_cache = diskcache.Cache(str(_elt_status_cache_dir))
+
+# Timeout for stuck ELT status (30 minutes)
+_ELT_STATUS_TIMEOUT_SECONDS = 10 * 60
+
+
+def _get_elt_running_status() -> bool:
+    """Check if ELT is currently running (server-side). Auto-resets if stuck too long."""
+    status = _elt_status_cache.get("elt_status", {})
+    if not isinstance(status, dict):
+        # Legacy format, reset
+        _elt_status_cache.delete("running")
+        return False
+
+    if not status.get("running"):
+        return False
+
+    # Check if stuck (started more than timeout ago)
+    started_at = status.get("started_at")
+    if started_at:
+        try:
+            started_time = datetime.fromisoformat(started_at)
+            elapsed = (datetime.now() - started_time).total_seconds()
+            if elapsed > _ELT_STATUS_TIMEOUT_SECONDS:
+                print(f"ELT status auto-reset: stuck for {elapsed/60:.1f} minutes")
+                _set_elt_running_status(False)
+                return False
+        except (ValueError, TypeError):
+            pass
+
+    return True
+
+
+def _set_elt_running_status(running: bool) -> None:
+    """Set ELT running status with timestamp (server-side)."""
+    if running:
+        _elt_status_cache.set("elt_status", {
+            "running": True,
+            "started_at": datetime.now().isoformat(),
+        })
+    else:
+        _elt_status_cache.set("elt_status", {"running": False})
 
 
 def _create_initial_store() -> dict:
@@ -56,11 +107,18 @@ def create_app() -> dash.Dash:
     # Get project root to find assets folder
     assets_path = PROJECT_ROOT / "assets"
 
+    # Setup background callback manager with separate cache directory
+    cache_dir = PROJECT_ROOT / ".cache" / "background_callbacks"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache = diskcache.Cache(str(cache_dir))
+    background_callback_manager = DiskcacheManager(cache)
+
     app = dash.Dash(
         __name__,
         external_stylesheets=[dbc.themes.BOOTSTRAP],
         suppress_callback_exceptions=True,
         assets_folder=str(assets_path) if assets_path.exists() else None,
+        background_callback_manager=background_callback_manager,
     )
 
     # Main layout with chat interface
@@ -81,6 +139,7 @@ def create_app() -> dash.Dash:
 
     # Register callbacks
     _register_chat_callbacks(app)
+    _register_elt_callbacks(app)
 
     return app
 
@@ -91,7 +150,7 @@ def _handle_user_message_immediate(
     user_input: str | None,
     store_data: dict,
     scroll_trigger: int,
-) -> tuple[list, dict, str, bool, dict, dict, bool, int]:
+) -> tuple[list, dict, str, bool, dict, dict, bool, int, bool, bool]:
     """Add user message to UI instantly and trigger agent processing."""
     if store_data is None:
         store_data = _create_initial_store()
@@ -125,6 +184,8 @@ def _handle_user_message_immediate(
         {"step": "Thinking..."},
         False,  # Enable interval
         (scroll_trigger or 0) + 1,  # Increment scroll trigger
+        True,  # Disable send button
+        True,  # Disable input
     )
 
 
@@ -132,7 +193,7 @@ def _process_agent_response(
     pending_request: dict | None,
     store_data: dict,
     scroll_trigger: int,
-) -> tuple[list, dict, bool, dict, int]:
+) -> tuple[list, dict, bool, dict, int, bool, bool]:
     """Process agent response and update UI."""
     if not pending_request or not store_data:
         raise PreventUpdate
@@ -195,7 +256,7 @@ def _process_agent_response(
     store_data["messages"] = messages
     store_data["thread_id"] = thread_id
 
-    return _render_messages(messages), store_data, False, None, (scroll_trigger or 0) + 1
+    return _render_messages(messages), store_data, False, None, (scroll_trigger or 0) + 1, False, False
 
 
 def _update_loading_step(n_intervals: int, is_loading: bool) -> tuple[dict, bool]:
@@ -257,6 +318,8 @@ def _register_chat_callbacks(app: dash.Dash) -> None:
             Output("chat-loading-step", "data", allow_duplicate=True),
             Output("chat-loading-interval", "disabled", allow_duplicate=True),
             Output("chat-scroll-trigger", "data", allow_duplicate=True),
+            Output("chat-send-button", "disabled", allow_duplicate=True),
+            Output("chat-input", "disabled", allow_duplicate=True),
         ],
         [
             Input("chat-send-button", "n_clicks"),
@@ -278,6 +341,8 @@ def _register_chat_callbacks(app: dash.Dash) -> None:
             Output("chat-loading", "data", allow_duplicate=True),
             Output("chat-pending-request", "data", allow_duplicate=True),
             Output("chat-scroll-trigger", "data", allow_duplicate=True),
+            Output("chat-send-button", "disabled", allow_duplicate=True),
+            Output("chat-input", "disabled", allow_duplicate=True),
         ],
         Input("chat-pending-request", "data"),
         [
@@ -439,6 +504,131 @@ def _handle_download_click(n_clicks: int | None, store_data: dict | None) -> dic
             return {"content": content, "filename": report_path.name}
     except Exception:
         raise PreventUpdate from None
+
+
+def _format_extraction_date(date_str: str | None) -> str:
+    """Format extraction date for display."""
+    if not date_str:
+        return "Nenhuma extração realizada ainda"
+    try:
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        return f"Última extração: {dt.strftime('%d/%m/%Y %H:%M')}"
+    except Exception:
+        return f"Última extração: {date_str}"
+
+
+def _load_last_extraction_date() -> str:
+    """Load and format last extraction date."""
+    date_str = get_last_extraction_date()
+    return _format_extraction_date(date_str)
+
+
+def _run_elt_pipeline() -> str:
+    """Run ELT pipeline in background."""
+    try:
+        extraction_date = run_incremental_elt()
+        return extraction_date
+    except Exception as e:
+        return f"Erro: {str(e)}"
+
+
+def _register_load_date_callback(app: dash.Dash) -> None:
+    """Register callback to load extraction date on page load."""
+    @app.callback(
+        Output("last-extraction-date", "children"),
+        Input("chat-main-container", "id"),
+        prevent_initial_call=False,
+    )
+    def load_extraction_date(_: str) -> str:
+        return _load_last_extraction_date()
+
+
+def _register_start_pipeline_callback(app: dash.Dash) -> None:
+    """Register background callback to start ELT pipeline."""
+    @app.callback(
+        Output("elt-pipeline-status", "data", allow_duplicate=True),
+        Input("update-data-button", "n_clicks"),
+        State("elt-pipeline-status", "data"),
+        background=True,
+        running=[
+            (Output("update-data-button", "disabled"), True, False),
+            (Output("update-data-button", "children"), "Atualizando...", "Atualizar Dados"),
+            (Output("update-button-spinner", "spinner_style"),
+             {"display": "block", "position": "absolute", "right": "10px", "top": "50%", "transform": "translateY(-50%)", "zIndex": "10"},
+             {"display": "none"}),
+        ],
+        prevent_initial_call=True,
+    )
+    def start_elt_pipeline(n_clicks: int | None, current_status: dict | None) -> dict:
+        # Return current status if no valid click (lets callback complete normally)
+        if not n_clicks:
+            return current_status or {"running": False, "result": None}
+
+        # If already running, return current status (don't use PreventUpdate in background callbacks)
+        if _get_elt_running_status():
+            return {"running": True, "result": "Em andamento..."}
+
+        _set_elt_running_status(True)
+        try:
+            extraction_date = _run_elt_pipeline()
+            return {"running": False, "result": extraction_date}
+        except Exception as e:
+            return {"running": False, "result": f"Erro: {str(e)}"}
+        finally:
+            _set_elt_running_status(False)
+
+
+def _register_button_state_callback(app: dash.Dash) -> None:
+    """Register callback to update button state and spinner based on server-side status."""
+    @app.callback(
+        [
+            Output("update-data-button", "disabled"),
+            Output("update-button-spinner", "spinner_style"),
+            Output("update-data-button", "children"),
+            Output("elt-status-check-interval", "disabled"),
+        ],
+        [
+            Input("elt-pipeline-status", "data"),
+            Input("elt-status-check-interval", "n_intervals"),
+            Input("chat-main-container", "id"),  # Trigger on page load
+        ],
+        prevent_initial_call=False,
+    )
+    def update_button_state(status_data: dict | None, _intervals: int, _container_id: str) -> tuple[bool, dict, str, bool]:
+        # Always check server-side status (handles page reload during ELT)
+        server_running = _get_elt_running_status()
+
+        if server_running:
+            spinner_style = {"display": "block", "position": "absolute", "right": "10px", "top": "50%", "transform": "translateY(-50%)", "zIndex": "10"}
+            return True, spinner_style, "Atualizando...", False  # Enable interval
+
+        # Not running
+        return False, {"display": "none"}, "Atualizar Dados", True  # Disable interval
+
+
+def _register_date_update_callback(app: dash.Dash) -> None:
+    """Register callback to update extraction date display."""
+    @app.callback(
+        Output("last-extraction-date", "children", allow_duplicate=True),
+        Input("elt-pipeline-status", "data"),
+        prevent_initial_call=True,
+    )
+    def update_extraction_date_display(status_data: dict | None) -> str:
+        if not status_data:
+            raise PreventUpdate
+
+        result = status_data.get("result")
+        if result and not result.startswith("Erro"):
+            return _format_extraction_date(result)
+        raise PreventUpdate
+
+
+def _register_elt_callbacks(app: dash.Dash) -> None:
+    """Register all callbacks for ELT pipeline."""
+    _register_load_date_callback(app)
+    _register_start_pipeline_callback(app)
+    _register_button_state_callback(app)
+    _register_date_update_callback(app)
 
 
 def main() -> None:

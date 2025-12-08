@@ -62,6 +62,8 @@ dependencies = [
   "sqlalchemy",
   "pyodbc",
   "kaleido>=1.2.0",
+  "diskcache>=5.6.0",
+  "multiprocess>=0.70",
 ]
 
 # *********************************************

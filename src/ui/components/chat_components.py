@@ -12,7 +12,7 @@ from dash import dcc, html
 from langchain_core.messages import AIMessage, ToolMessage
 from plotly.graph_objects import Figure
 
-from elt.load import load_srag_data
+from elt.load import NoDataAvailableError, load_srag_data
 from tools.location_utils import determine_location_filter
 
 # Constants
@@ -238,12 +238,27 @@ def create_chat_layout() -> html.Div:
                 html.H2("Agente Inteligente SRAG", className="mb-0"),
                 html.P("Faça perguntas sobre dados, métricas e tendências de SRAG",
                        className="text-muted small mb-0"),
-            ], width=10),
+                html.P(id="last-extraction-date", className="text-muted small mb-0",
+                       style={"fontSize": "12px", "marginTop": "4px"}),
+            ], width=8),
             dbc.Col([
+                html.Div([
+                    dbc.Button("Atualizar Dados", id="update-data-button",
+                              color="primary", size="sm", className="w-100 mb-2",
+                              n_clicks=0, disabled=False),
+                    dbc.Spinner(
+                        html.Div(),
+                        size="sm",
+                        type="border",
+                        color="light",
+                        spinner_style={"display": "none"},
+                        id="update-button-spinner",
+                    ),
+                ], style={"position": "relative", "width": "100%"}),
                 dbc.Button("Limpar Conversa", id="chat-clear-button",
                           color="secondary", size="sm", outline=True,
                           className="w-100", n_clicks=0),
-            ], width=2, className="d-flex align-items-end"),
+            ], width=4, className="d-flex flex-column align-items-end"),
         ], className="mb-3"),
         # Chat container with flexbox layout
         html.Div(
@@ -319,6 +334,9 @@ def create_chat_layout() -> html.Div:
         dcc.Download(id="chat-download"),
         # Store to trigger scroll to bottom
         dcc.Store(id="chat-scroll-trigger", data=0),
+        # ELT pipeline state
+        dcc.Store(id="elt-pipeline-status", data={"running": False, "result": None}),
+        dcc.Interval(id="elt-status-check-interval", interval=2000, n_intervals=0, disabled=True),
     ], className="p-4", id="chat-main-container")
 
 

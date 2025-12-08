@@ -177,22 +177,45 @@ def generate_metric_explanation(
         for article in news[:2]:
             context += f"- {article.get('title', '')}\n"
 
+    # Get period information from metric_data
+    period_start = metric_data.get("period_start")
+    period_end = metric_data.get("period_end")
+    period_info = ""
+    if period_start and period_end:
+        period_info = f"\nPeríodo analisado: {period_start} até {period_end}"
+    
+    # Check if period_end is different from today
+    from datetime import datetime
+    today = datetime.now().date()
+    data_outdated_note = ""
+    if period_end:
+        try:
+            period_end_date = datetime.fromisoformat(period_end.replace("Z", "+00:00")).date()
+            if period_end_date < today:
+                data_outdated_note = "\nIMPORTANTE: A data máxima dos dados é diferente da data de hoje. Você DEVE mencionar 'Estes são os dados disponíveis atualmente' ou similar na explicação."
+        except Exception:
+            pass
+    
     prompt = f"""Você é um analista de dados de saúde.
 
-Com base nos dados abaixo, gere uma explicação contextualizada curta (1-2 frases) em português que explique o que este valor significa no cenário atual.
+Com base nos dados abaixo, gere uma explicação contextualizada curta (2-3 frases) em português que explique o que este valor significa no cenário atual.
 
-{context}
+{context}{period_info}{data_outdated_note}
 
 Instruções:
 - Explique o que o valor significa (alto, baixo, preocupante, positivo, etc.)
+- SEMPRE mencione o período analisado na explicação (e.g., "nos últimos 12 meses", "no período de 7 dias", "nos últimos 30 dias")
+- NUNCA mencione o formato de data (YYYY-MM-DD) explicitamente - apenas use datas naturalmente
+- Se a data máxima dos dados for diferente da data de hoje, SEMPRE adicione uma nota mencionando "Estes são os dados disponíveis atualmente" ou similar
 - Conecte às notícias se relevante
 - Seja claro e profissional
-- Máximo 2 frases
+- Máximo 2-3 frases
 
 Explicação:"""
 
     try:
-        response = _llm.invoke(prompt)
+        llm = _get_llm()
+        response = llm.invoke(prompt)
         return response.content.strip()
     except Exception:
         # Fallback explanation
@@ -333,28 +356,40 @@ DADOS PARA {location}:
         case_rate = case_data.get("rate")
         case_current = case_data.get("current_period_cases", 0)
         case_previous = case_data.get("previous_period_cases", 0)
+        case_period_start = case_data.get("period_start")
+        case_period_end = case_data.get("period_end")
         
         mortality_data = metrics.get("mortality", {})
         mortality_rate = mortality_data.get("rate")
         total_deaths = mortality_data.get("total_deaths", 0)
         total_cases = mortality_data.get("total_cases", 0)
+        mortality_period_start = mortality_data.get("period_start")
+        mortality_period_end = mortality_data.get("period_end")
         
         icu_data = metrics.get("icu_occupancy", {})
         icu_rate = icu_data.get("occupancy_rate")
         icu_patients = icu_data.get("patients_in_icu", 0)
         icu_beds = icu_data.get("total_icu_beds", 0)
+        icu_period_start = icu_data.get("period_start")
+        icu_period_end = icu_data.get("period_end")
         
         vax_data = metrics.get("vaccination", {})
         covid_vax = vax_data.get("covid_rate")
         flu_vax = vax_data.get("flu_rate")
+        vax_period_start = vax_data.get("period_start")
+        vax_period_end = vax_data.get("period_end")
         
         context_parts.append(f"""
 Métricas Confirmadas:
 - Taxa de aumento de casos: {case_rate}% (período atual: {case_current} casos, período anterior: {case_previous} casos)
+  Período: {case_period_start} até {case_period_end}
 - Taxa de mortalidade: {mortality_rate}% ({total_deaths} óbitos em {total_cases} casos)
+  Período: {mortality_period_start} até {mortality_period_end}
 - Taxa de ocupação de UTI: {icu_rate}% ({icu_patients} pacientes de {icu_beds} leitos)
+  Período: {icu_period_start} até {icu_period_end}
 - Taxa de vacinação COVID-19: {covid_vax}%
 - Taxa de vacinação Gripe: {flu_vax}%
+  Período: {vax_period_start} até {vax_period_end}
 """)
 
     # Add chart information only if confirmed
@@ -449,7 +484,11 @@ INSTRUÇÕES CRÍTICAS PARA O RELATÓRIO:
 """
     
     if include_metrics:
-        instructions += "   - Interprete os dados das métricas e explique o que significam\n"
+        instructions += """   - Interprete os dados das métricas e explique o que significam
+   - SEMPRE mencione o período analisado nas explicações (e.g., "nos últimos 12 meses", "no período de 7 dias", "nos últimos 30 dias")
+   - NUNCA mencione o formato de data (YYYY-MM-DD) explicitamente - apenas use datas naturalmente
+   - Se a data máxima dos dados (period_end) for diferente da data de hoje, SEMPRE adicione uma nota mencionando "Estes são os dados disponíveis atualmente" ou similar
+"""
     if include_charts and chart_info:
         if isinstance(chart_info, dict) and ("daily" in chart_info or "monthly" in chart_info):
             instructions += "   - Integre insights dos gráficos diários e mensais (tendências, picos, padrões) naturalmente no texto\n"
@@ -512,8 +551,14 @@ INSTRUÇÕES CRÍTICAS PARA O RELATÓRIO:
    - Seja profissional mas acessível
    - Mínimo 4 seções, máximo 6 seções
    - Cada seção: 1-2 parágrafos
+   - NUNCA mencione formato de data (YYYY-MM-DD) explicitamente - apenas use datas naturalmente
 
-8. FONTES:
+8. EXPLICAÇÕES DAS MÉTRICAS (se métricas incluídas):
+   - SEMPRE mencione o período analisado nas explicações (e.g., "nos últimos 12 meses", "no período de 7 dias", "nos últimos 30 dias")
+   - Se a data máxima dos dados (period_end) for diferente da data de hoje, SEMPRE adicione uma nota mencionando "Estes são os dados disponíveis atualmente" ou similar
+   - Explique o que cada métrica significa e sua significância no contexto da saúde pública
+
+9. FONTES:
    - NÃO liste fontes no corpo do texto
    - NÃO mencione URLs ou links no texto principal
    - As fontes serão adicionadas automaticamente no final

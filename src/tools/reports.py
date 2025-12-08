@@ -9,7 +9,7 @@ import pandas as pd
 from langchain_core.tools import tool
 
 from charts.charts import figure_to_image_file, plot_daily_cases, plot_monthly_cases
-from elt.load import load_srag_data
+from elt.load import NoDataAvailableError, load_srag_data
 from report.templater import (
     format_metrics_table,
     format_news_section,
@@ -220,6 +220,17 @@ def generate_download_report(
     # Fetch data
     location_desc = get_location_description(uf, city_code)
     metrics = _fetch_all_metrics(uf, city_code)
+
+    # Check if any metric returned an error (no data available)
+    for metric_name, metric_data in metrics.items():
+        if isinstance(metric_data, dict) and "error" in metric_data:
+            return {
+                "error": metric_data["error"],
+                "report_content": "",
+                "file_path": "",
+                "file_size": 0,
+            }
+
     news = _fetch_news(location_desc, include_news, max_news)
 
     # Generate charts and images if requested, and extract statistics
@@ -227,10 +238,18 @@ def generate_download_report(
     image_files = {}
     temp_dir = None
     chart_info = None
-    
+
     if include_charts:
         # Load data and generate actual Plotly figures
-        df = load_srag_data()
+        try:
+            df = load_srag_data()
+        except NoDataAvailableError as e:
+            return {
+                "error": str(e),
+                "report_content": "",
+                "file_path": "",
+                "file_size": 0,
+            }
         location_col, location_value = determine_location_filter(uf, city_code)
         
         # Extract chart statistics for integration

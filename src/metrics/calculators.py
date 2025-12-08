@@ -155,6 +155,7 @@ def calculate_mortality_rate(
     df: pd.DataFrame,
     location_col: str | None = None,
     location_value: str | None = None,
+    lookback_months: int | None = None,
 ) -> dict[str, Any]:
     """
     Calculate mortality rate (percentage of cases that resulted in death).
@@ -163,6 +164,7 @@ def calculate_mortality_rate(
         df: DataFrame with case data
         location_col: Optional location column name for filtering
         location_value: Optional location value to filter
+        lookback_months: Optional number of months to look back (default: None = all data)
 
     Returns:
         Dictionary with:
@@ -188,21 +190,47 @@ def calculate_mortality_rate(
 
     # Get date column for period calculation
     date_col = _get_date_column(df)
+    period_start = None
+    period_end = None
+    
     if date_col:
-        df_with_dates = df[[date_col, "EVOLUCAO"]].copy()
-        df_with_dates[date_col] = pd.to_datetime(df_with_dates[date_col], errors="coerce")
-        df_with_dates = df_with_dates.dropna(subset=[date_col, "EVOLUCAO"])
-
-        if len(df_with_dates) > 0:
-            period_start = df_with_dates[date_col].min().normalize()
-            period_end = df_with_dates[date_col].max().normalize()
+        # Convert date column to datetime
+        df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+        df = df.dropna(subset=[date_col, "EVOLUCAO"])
+        
+        if len(df) > 0:
+            data_max_date = df[date_col].max().normalize()
+            data_min_date = df[date_col].min().normalize()
+            
+            # Filter by lookback_months if specified
+            if lookback_months is not None:
+                from datetime import datetime
+                current_date = datetime.now().date()
+                period_end_date = min(data_max_date.date(), current_date)
+                # Use approximately 30 days per month
+                period_start_date = period_end_date - timedelta(days=lookback_months * 30)
+                period_start_date = max(period_start_date, data_min_date.date())
+                
+                # Filter dataframe to the specified period
+                df = df[
+                    (df[date_col].dt.date >= period_start_date) &
+                    (df[date_col].dt.date <= period_end_date)
+                ]
+                
+                period_start = pd.Timestamp(period_start_date).normalize()
+                period_end = pd.Timestamp(period_end_date).normalize()
+            else:
+                # Use all available data
+                period_start = data_min_date
+                period_end = data_max_date
         else:
             period_start = None
             period_end = None
     else:
-        period_start = None
-        period_end = None
+        # No date column, but still need to filter EVOLUCAO
+        df = df.dropna(subset=["EVOLUCAO"])
 
+    # Extract only EVOLUCAO column for calculation
     df = df[["EVOLUCAO"]].copy()
     df = df.dropna(subset=["EVOLUCAO"])
 
@@ -426,6 +454,7 @@ def calculate_vaccination_rate(
     vaccine_type: str = "both",
     location_col: str | None = None,
     location_value: str | None = None,
+    lookback_months: int | None = None,
 ) -> dict[str, Any]:
     """
     Calculate vaccination rate for COVID-19 and/or flu.
@@ -435,6 +464,7 @@ def calculate_vaccination_rate(
         vaccine_type: "covid", "flu", or "both" (default: "both")
         location_col: Optional location column name for filtering
         location_value: Optional location value to filter
+        lookback_months: Optional number of months to look back (default: None = all data)
 
     Returns:
         Dictionary with:
@@ -473,20 +503,45 @@ def calculate_vaccination_rate(
 
     # Get date column for period calculation
     date_col = _get_date_column(df)
+    period_start = None
+    period_end = None
+    
     if date_col:
-        df_with_dates = df[[date_col] + cols_to_keep].copy()
-        df_with_dates[date_col] = pd.to_datetime(df_with_dates[date_col], errors="coerce")
-        df_with_dates = df_with_dates.dropna(subset=[date_col])
-
+        # Convert date column to datetime
+        df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+        df = df.dropna(subset=[date_col])
+        
         # Filter to only rows with vaccination data
-        if calculate_covid and "VACINA_COV" in df_with_dates.columns:
-            df_with_dates = df_with_dates.dropna(subset=["VACINA_COV"])
-        if calculate_flu and "VACINA" in df_with_dates.columns:
-            df_with_dates = df_with_dates.dropna(subset=["VACINA"])
+        if calculate_covid and "VACINA_COV" in df.columns:
+            df = df.dropna(subset=["VACINA_COV"])
+        if calculate_flu and "VACINA" in df.columns:
+            df = df.dropna(subset=["VACINA"])
 
-        if len(df_with_dates) > 0:
-            period_start = df_with_dates[date_col].min().normalize()
-            period_end = df_with_dates[date_col].max().normalize()
+        if len(df) > 0:
+            data_max_date = df[date_col].max().normalize()
+            data_min_date = df[date_col].min().normalize()
+            
+            # Filter by lookback_months if specified
+            if lookback_months is not None:
+                from datetime import datetime
+                current_date = datetime.now().date()
+                period_end_date = min(data_max_date.date(), current_date)
+                # Use approximately 30 days per month
+                period_start_date = period_end_date - timedelta(days=lookback_months * 30)
+                period_start_date = max(period_start_date, data_min_date.date())
+                
+                # Filter dataframe to the specified period
+                df = df[
+                    (df[date_col].dt.date >= period_start_date) &
+                    (df[date_col].dt.date <= period_end_date)
+                ]
+                
+                period_start = pd.Timestamp(period_start_date).normalize()
+                period_end = pd.Timestamp(period_end_date).normalize()
+            else:
+                # Use all available data
+                period_start = data_min_date
+                period_end = data_max_date
         else:
             period_start = None
             period_end = None

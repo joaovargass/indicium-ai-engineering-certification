@@ -89,7 +89,8 @@ def _get_default_raw_state() -> dict:
     return {
         "processed_years": [],
         "current_year": None,
-        "last_vivo_date": None,
+        "last_live_date": None,
+        "last_extraction_date": None,
         "deltas": [],
     }
 
@@ -108,7 +109,6 @@ def load_raw_state(client: FileSystemClient) -> dict:
     """Load raw data state from Azure."""
     state = _read_json(client, RAW_STATE_PATH)
     if state is None:
-        print("Raw state file not found, creating new state")
         return _get_default_raw_state()
     return state
 
@@ -119,11 +119,24 @@ def save_raw_state(client: FileSystemClient, state: dict) -> None:
     print(f"Raw state saved: {len(state.get('deltas', []))} deltas tracked")
 
 
+def update_last_extraction_date(client: FileSystemClient, extraction_date: str) -> None:
+    """Update last extraction date in raw state."""
+    state = load_raw_state(client)
+    state["last_extraction_date"] = extraction_date
+    save_raw_state(client, state)
+
+
+def get_last_extraction_date() -> str | None:
+    """Get last extraction date from raw state."""
+    client = get_client()
+    state = load_raw_state(client)
+    return state.get("last_extraction_date")
+
+
 def load_dw_state(client: FileSystemClient) -> dict:
     """Load DW state from Azure."""
     state = _read_json(client, DW_STATE_PATH)
     if state is None:
-        print("DW state file not found, creating new state")
         return _get_default_dw_state()
     return state
 
@@ -250,28 +263,28 @@ def _download_parquet(
     return df
 
 
-def _cleanup_vivo_deltas(
+def _cleanup_live_deltas(
     client: FileSystemClient, year: int, raw_state: dict
 ) -> tuple[dict, bool]:
-    """Remove vivo deltas for a year transitioning to congelado."""
-    vivo_deltas = [
+    """Remove live deltas for a year transitioning to frozen."""
+    live_deltas = [
         d
         for d in raw_state.get("deltas", [])
-        if d.get("type") == "vivo" and d.get("year") == year
+        if d.get("type") == "live" and d.get("year") == year
     ]
 
-    if not vivo_deltas:
+    if not live_deltas:
         return raw_state, False
 
     dw_state = load_dw_state(client)
     processed_by_dw = set(dw_state.get("processed_deltas", []))
-    vivo_filenames = {d["filename"] for d in vivo_deltas}
-    any_vivo_processed = bool(vivo_filenames & processed_by_dw)
+    live_filenames = {d["filename"] for d in live_deltas}
+    any_live_processed = bool(live_filenames & processed_by_dw)
 
-    print(f"Year {year} transitioning from vivo to congelado")
-    print(f"Removing {len(vivo_deltas)} old vivo delta(s)...")
+    print(f"Year {year} transitioning from live to frozen")
+    print(f"Removing {len(live_deltas)} old live delta(s)...")
 
-    for delta in vivo_deltas:
+    for delta in live_deltas:
         azure_path = f"{RAW_DELTAS_DIR}/{delta['filename']}"
         if _delete_file(client, azure_path):
             print(f"  Deleted: {delta['filename']}")
@@ -279,34 +292,34 @@ def _cleanup_vivo_deltas(
     raw_state["deltas"] = [
         d
         for d in raw_state["deltas"]
-        if not (d.get("type") == "vivo" and d.get("year") == year)
+        if not (d.get("type") == "live" and d.get("year") == year)
     ]
 
-    if any_vivo_processed:
+    if any_live_processed:
         dw_state["processed_deltas"] = [
-            f for f in dw_state["processed_deltas"] if f not in vivo_filenames
+            f for f in dw_state["processed_deltas"] if f not in live_filenames
         ]
         save_dw_state(client, dw_state)
-        print(f"  Cleaned up DW state (removed {len(vivo_filenames)} old entries)")
+        print(f"  Cleaned up DW state (removed {len(live_filenames)} old entries)")
 
-    return raw_state, any_vivo_processed
+    return raw_state, any_live_processed
 
 
-def upload_congelado_delta(
+def upload_frozen_delta(
     client: FileSystemClient,
     df: pd.DataFrame,
     year: int,
     local_temp_dir: Path,
     raw_state: dict,
 ) -> dict:
-    """Upload congelado (frozen year) data as a delta file."""
+    """Upload frozen year data as a delta file."""
     if year in raw_state.get("processed_years", []):
         print(f"Year {year} already processed, skipping")
         return raw_state
 
-    raw_state, vivo_was_in_dw = _cleanup_vivo_deltas(client, year, raw_state)
+    raw_state, live_was_in_dw = _cleanup_live_deltas(client, year, raw_state)
 
-    filename = f"congelado_{year}.parquet"
+    filename = f"frozen_{year}.parquet"
     azure_path = f"{RAW_DELTAS_DIR}/{filename}"
 
     if PRIMARY_KEY_FIELD in df.columns:
@@ -327,23 +340,23 @@ def upload_congelado_delta(
         {
             "filename": filename,
             "year": year,
-            "type": "congelado",
+            "type": "frozen",
             "max_notific": max_notific,
             "rows": len(df),
             "uploaded_at": datetime.now().isoformat(),
         }
     )
 
-    if vivo_was_in_dw:
+    if live_was_in_dw:
         dw_state = load_dw_state(client)
         dw_state["processed_deltas"].append(filename)
         save_dw_state(client, dw_state)
-        print(f"  Marked {filename} as already processed (data from vivo)")
+        print(f"  Marked {filename} as already processed (data from live)")
 
     return raw_state
 
 
-def upload_vivo_delta(
+def upload_live_delta(
     client: FileSystemClient,
     df: pd.DataFrame,
     year: int,
@@ -351,11 +364,19 @@ def upload_vivo_delta(
     local_temp_dir: Path,
     raw_state: dict,
 ) -> dict:
-    """Upload vivo (live year) data as incremental delta."""
-    last_max = 0
+    """Upload live year data as incremental delta."""
+    # Get last_max from raw_state deltas (live deltas for this year)
+    last_max_raw = 0
     for delta in raw_state.get("deltas", []):
-        if delta.get("type") == "vivo" and delta.get("year") == year:
-            last_max = max(last_max, delta.get("max_notific", 0))
+        if delta.get("type") == "live" and delta.get("year") == year:
+            last_max_raw = max(last_max_raw, delta.get("max_notific", 0))
+
+    # Also check dw_state to prevent re-uploading data already loaded to DW
+    dw_state = load_dw_state(client)
+    last_max_dw = dw_state.get("last_max_notific", 0)
+
+    # Use the maximum of both as the cutoff
+    last_max = max(last_max_raw, last_max_dw)
 
     if PRIMARY_KEY_FIELD in df.columns:
         df[PRIMARY_KEY_FIELD] = pd.to_numeric(df[PRIMARY_KEY_FIELD], errors="coerce")
@@ -364,7 +385,7 @@ def upload_vivo_delta(
         new_records = df
 
     if len(new_records) == 0:
-        print("No new vivo records to upload")
+        print("No new live records to upload")
         return raw_state
 
     filename = _generate_delta_filename(year, date_str)
@@ -379,12 +400,12 @@ def upload_vivo_delta(
     _upload_parquet(client, new_records, azure_path, local_temp_dir)
 
     raw_state["current_year"] = year
-    raw_state["last_vivo_date"] = date_str
+    raw_state["last_live_date"] = date_str
     raw_state["deltas"].append(
         {
             "filename": filename,
             "year": year,
-            "type": "vivo",
+            "type": "live",
             "date": date_str,
             "max_notific": max_notific,
             "rows": len(new_records),
@@ -531,8 +552,14 @@ def read_from_dw(
     return df
 
 
+class NoDataAvailableError(Exception):
+    """Raised when no SRAG data is available."""
+
+    pass
+
+
 def load_srag_data() -> pd.DataFrame:
-    """Load SRAG data from cache or DW. Raises RuntimeError if unavailable."""
+    """Load SRAG data from cache or DW. Raises NoDataAvailableError if unavailable or empty."""
     from pathlib import Path
 
     project_root = Path(__file__).resolve().parent.parent.parent
@@ -540,14 +567,24 @@ def load_srag_data() -> pd.DataFrame:
     cache_path = cache_dir / "dash_cache.parquet"
 
     if cache_path.exists():
-        return pd.read_parquet(cache_path)
+        df = pd.read_parquet(cache_path)
+        if df.empty:
+            raise NoDataAvailableError(
+                "O cache de dados está vazio. Use o botão 'Atualizar Dados' para carregar os dados."
+            )
+        return df
 
     try:
         df = read_from_dw()
     except Exception as e:
-        raise RuntimeError(
-            f"Failed to load data from DW and no cache found: {e}"
+        raise NoDataAvailableError(
+            "Dados não disponíveis. Use o botão 'Atualizar Dados' para carregar os dados do SRAG."
         ) from e
+
+    if df.empty:
+        raise NoDataAvailableError(
+            "Nenhum dado encontrado no Data Warehouse. Use o botão 'Atualizar Dados' para carregar os dados."
+        )
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     df.to_parquet(cache_path, index=False)
