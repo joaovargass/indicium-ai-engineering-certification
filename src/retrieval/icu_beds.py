@@ -1,6 +1,7 @@
 """ICU bed data fetcher from CNES (Cadastro Nacional de Estabelecimentos de Saúde)."""
 
 import json
+import unicodedata
 from datetime import datetime, timedelta
 from io import StringIO
 from pathlib import Path
@@ -50,6 +51,30 @@ FALLBACK_ICU_BEDS = {
 }
 FALLBACK_BRAZIL_TOTAL = 63401
 
+# Mapping from IBGE state code (first 2 digits) to UF
+IBGE_STATE_TO_UF = {
+    "11": "RO", "12": "AC", "13": "AM", "14": "RR", "15": "PA", "16": "AP", "17": "TO",
+    "21": "MA", "22": "PI", "23": "CE", "24": "RN", "25": "PB", "26": "PE", "27": "AL",
+    "28": "SE", "29": "BA",
+    "31": "MG", "32": "ES", "33": "RJ", "35": "SP", "41": "PR", "42": "SC", "43": "RS",
+    "50": "MS", "51": "MT", "52": "GO", "53": "DF",
+}
+
+
+def _normalize_city_name(name: str) -> str:
+    """
+    Normalize city name to match CNES format (uppercase, no accents).
+
+    Args:
+        name: City name (e.g., "São Paulo")
+
+    Returns:
+        Normalized name (e.g., "SAO PAULO")
+    """
+    nfd = unicodedata.normalize("NFD", name)
+    without_accents = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
+    return without_accents.upper().strip()
+
 
 def _load_cache() -> dict | None:
     """Load cached ICU bed data if valid."""
@@ -64,6 +89,13 @@ def _load_cache() -> dict | None:
         if datetime.now() - cached_at > timedelta(days=CACHE_TTL_DAYS):
             return None
 
+        # Convert string keys back to tuples
+        icu_beds_by_city_str = cache.get("icu_beds_by_city", {})
+        icu_beds_by_city = {
+            tuple(key.split("|")): beds for key, beds in icu_beds_by_city_str.items()
+        }
+        cache["icu_beds_by_city"] = icu_beds_by_city
+
         return cache
     except Exception:
         return None
@@ -73,10 +105,15 @@ def _save_cache(data: dict) -> None:
     """Save ICU bed data to cache."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Convert tuple keys to strings for JSON serialization
+    icu_beds_by_city = data.get("icu_beds_by_city", {})
+    icu_beds_by_city_str = {f"{uf}|{city}": beds for (uf, city), beds in icu_beds_by_city.items()}
+
     cache = {
         "cached_at": datetime.now().isoformat(),
         "competency": data.get("competency"),
         "icu_beds_by_uf": data.get("icu_beds_by_uf"),
+        "icu_beds_by_city": icu_beds_by_city_str,
         "brazil_total": data.get("brazil_total"),
     }
 
@@ -104,7 +141,7 @@ def _fetch_from_api(year: int | None = None) -> dict | None:
         )
 
         # Convert numeric columns
-        numeric_cols = ["UTI_TOTAL_EXIST", "UTI_TOTAL_SUS", "COMP"]
+        numeric_cols = ["UTI_TOTAL_EXIST", "COMP"]
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -120,9 +157,19 @@ def _fetch_from_api(year: int | None = None) -> dict | None:
         # Convert to int
         icu_by_uf = {k: int(v) for k, v in icu_by_uf.items()}
 
+        # Aggregate by city (UF + MUNICIPIO)
+        city_beds = df_latest.groupby(["UF", "MUNICIPIO"])["UTI_TOTAL_EXIST"].sum().reset_index()
+        icu_by_city = {}
+        for _, row in city_beds.iterrows():
+            uf = row["UF"]
+            city_name = _normalize_city_name(str(row["MUNICIPIO"]))
+            key = (uf, city_name)
+            icu_by_city[key] = int(row["UTI_TOTAL_EXIST"])
+
         return {
             "competency": int(latest_comp),
             "icu_beds_by_uf": icu_by_uf,
+            "icu_beds_by_city": icu_by_city,
             "brazil_total": brazil_total,
             "source": "cnes_api",
         }
@@ -146,6 +193,7 @@ def get_icu_beds_data(force_refresh: bool = False) -> dict:
         Dictionary with:
         - competency: Data period (YYYYMM)
         - icu_beds_by_uf: Dict mapping UF -> ICU bed count
+        - icu_beds_by_city: Dict mapping (UF, city_name) -> ICU bed count
         - brazil_total: Total ICU beds in Brazil
         - source: "cache", "cnes_api", or "fallback"
 
@@ -165,6 +213,7 @@ def get_icu_beds_data(force_refresh: bool = False) -> dict:
     return {
         "competency": 202412,
         "icu_beds_by_uf": FALLBACK_ICU_BEDS.copy(),
+        "icu_beds_by_city": {},
         "brazil_total": FALLBACK_BRAZIL_TOTAL,
         "source": "fallback",
     }
@@ -179,7 +228,7 @@ def get_icu_beds_for_location(
 
     Args:
         uf: State code (e.g., "SP", "RJ") or None for Brazil total.
-        city_code: IBGE city code (not supported yet, uses state data).
+        city_code: IBGE city code (6 digits). Converts to city name for lookup.
 
     Returns:
         Tuple of (bed_count, source_description).
@@ -190,10 +239,30 @@ def get_icu_beds_for_location(
     source = f"CNES {data.get('competency', 'N/A')} ({data.get('source', 'unknown')})"
 
     if city_code:
-        # City-level data not available in this API
-        # Fall back to state data if we can determine the state
-        # For now, return None with explanation
-        return None, "city-level ICU data not available"
+        # Convert IBGE code to city name
+        from tools.location_utils import get_city_name_from_code
+
+        city_name = get_city_name_from_code(city_code)
+        if not city_name:
+            return None, "city not found"
+
+        # Normalize city name to match CNES format
+        normalized_city = _normalize_city_name(city_name)
+
+        # Extract UF from IBGE code (first 2 digits)
+        state_code = str(city_code)[:2]
+        uf_from_code = IBGE_STATE_TO_UF.get(state_code)
+        if not uf_from_code:
+            return None, "invalid city code"
+
+        # Lookup in city-level data
+        city_key = (uf_from_code, normalized_city)
+        beds = data.get("icu_beds_by_city", {}).get(city_key)
+        if beds is not None:
+            return beds, source
+
+        # If not found, return None
+        return None, "city-level ICU data not found in CNES"
 
     if uf:
         uf_upper = uf.upper()
@@ -204,9 +273,3 @@ def get_icu_beds_for_location(
     return data.get("brazil_total"), source
 
 
-def clear_cache() -> bool:
-    """Clear the ICU beds cache file."""
-    if CACHE_FILE.exists():
-        CACHE_FILE.unlink()
-        return True
-    return False

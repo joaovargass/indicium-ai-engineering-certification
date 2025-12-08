@@ -1,13 +1,19 @@
 """Configuration constants for SRAG data processing."""
 
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Execution flags
 FULL_REFRESH = False
 RESET = False
 DOWNLOAD_ENABLED = True
 
 # Azure Storage configuration
-STORAGE_ACCOUNT_NAME = "desafioai"
-FILE_SYSTEM_NAME = "desafio-ai"
+STORAGE_ACCOUNT_NAME = os.getenv("STORAGE_ACCOUNT_NAME", "desafioai")
+FILE_SYSTEM_NAME = os.getenv("FILE_SYSTEM_NAME", "desafio-ai")
 
 # Azure paths for raw data
 RAW_STATE_PATH = "raw/state.json"

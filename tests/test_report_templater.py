@@ -1,13 +1,9 @@
 """Comprehensive tests for report templater module."""
 
-import os
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 # Add src to path
 import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_PATH = PROJECT_ROOT / "src"
@@ -194,9 +190,7 @@ class TestLLMGeneration:
         """Test metric explanation fallback on LLM error."""
         mock_llm.invoke.side_effect = Exception("LLM error")
 
-        result = generate_metric_explanation(
-            "case_increase_rate", 15.3, {}, []
-        )
+        result = generate_metric_explanation("case_increase_rate", 15.3, {}, [])
 
         # Should have fallback explanation
         assert len(result) > 0
@@ -456,5 +450,7 @@ class TestIntegration:
         assert "Métricas Principais" in report
         assert "News" in report
         # The summary should contain the mocked content
-        assert "Explicação contextualizada" in report or "Resumo executivo completo" in report
-
+        assert (
+            "Explicação contextualizada" in report
+            or "Resumo executivo completo" in report
+        )

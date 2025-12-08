@@ -151,8 +151,8 @@ def read_csv(file_path: Path) -> pd.DataFrame:
             )
 
 
-def _cleanup_local_vivo_files(year_dir: Path, year: int) -> None:
-    """Remove local CSV files when a year transitions to congelado."""
+def _cleanup_local_live_files(year_dir: Path, year: int) -> None:
+    """Remove local CSV files when a year transitions to frozen."""
     csv_files = list(year_dir.glob("*.csv"))
     if csv_files:
         print(f"Year {year} transitioning: removing {len(csv_files)} local CSV file(s)")
@@ -161,13 +161,13 @@ def _cleanup_local_vivo_files(year_dir: Path, year: int) -> None:
             print(f"  Deleted: {csv_file.name}")
 
 
-def download_congelado(
+def download_frozen(
     data_dir: Path,
     year: int,
     freeze_date_str: str,
     processed_years: list[int],
 ) -> pd.DataFrame | None:
-    """Download congelado (frozen) data for a specific year."""
+    """Download frozen data for a specific year."""
     if year in processed_years:
         print(f"Year {year} already processed in Azure, skipping download")
         return None
@@ -175,7 +175,7 @@ def download_congelado(
     year_dir = data_dir / str(year)
     year_dir.mkdir(exist_ok=True)
 
-    _cleanup_local_vivo_files(year_dir, year)
+    _cleanup_local_live_files(year_dir, year)
 
     if not DOWNLOAD_ENABLED:
         parquet_files = list(year_dir.glob("*.parquet"))
@@ -201,8 +201,8 @@ def download_congelado(
     return None
 
 
-def _get_local_vivo_date(year_dir: Path) -> str | None:
-    """Extract date from local vivo CSV filename."""
+def _get_local_live_date(year_dir: Path) -> str | None:
+    """Extract date from local live CSV filename."""
     csv_files = list(year_dir.glob("*.csv"))
     if not csv_files:
         return None
@@ -210,14 +210,14 @@ def _get_local_vivo_date(year_dir: Path) -> str | None:
     return match.group(1) if match else None
 
 
-def download_vivo(
+def download_live(
     data_dir: Path,
     year: int,
     live_date_str: str,
-    last_vivo_date: str | None,
+    last_live_date: str | None,
 ) -> tuple[pd.DataFrame | None, bool]:
     """
-    Download vivo (live) data for current year.
+    Download live data for current year.
 
     Returns:
         Tuple of (DataFrame or None, is_new_data: bool)
@@ -226,18 +226,18 @@ def download_vivo(
     year_dir = data_dir / str(year)
     year_dir.mkdir(exist_ok=True)
 
-    local_date = _get_local_vivo_date(year_dir)
+    local_date = _get_local_live_date(year_dir)
 
     if local_date == live_date_str:
-        print(f"Local vivo file already has latest date ({live_date_str})")
+        print(f"Local live file already has latest date ({live_date_str})")
         csv_files = list(year_dir.glob("*.csv"))
         if csv_files:
-            is_new = last_vivo_date != live_date_str
+            is_new = last_live_date != live_date_str
             return read_csv(csv_files[0]), is_new
         return None, False
 
-    if last_vivo_date == live_date_str:
-        print(f"Vivo date unchanged in Azure ({live_date_str})")
+    if last_live_date == live_date_str:
+        print(f"Live date unchanged in Azure ({live_date_str})")
         csv_files = list(year_dir.glob("*.csv"))
         if csv_files:
             return read_csv(csv_files[0]), False
@@ -252,7 +252,7 @@ def download_vivo(
         return None, False
 
     for old_csv in year_dir.glob("*.csv"):
-        print(f"Removing outdated vivo file: {old_csv.name}")
+        print(f"Removing outdated live file: {old_csv.name}")
         old_csv.unlink()
 
     year_str = str(year)[2:]
@@ -273,10 +273,10 @@ def fetch_web_dates(
     current_year: int,
 ) -> tuple[str | None, str | None]:
     """Fetch dates from OpenDataSUS website."""
-    congelado_years = [y for y in years if y != current_year]
-    all_congelado_processed = all(y in processed_years for y in congelado_years)
+    frozen_years = [y for y in years if y != current_year]
+    all_frozen_processed = all(y in processed_years for y in frozen_years)
 
-    if full_refresh or not all_congelado_processed:
+    if full_refresh or not all_frozen_processed:
         return get_dates(OPENDATASUS_URL)
     else:
         _, live_date = get_dates(OPENDATASUS_URL, only_live=True)
@@ -288,7 +288,7 @@ def extract_data(
     current_year: int,
     years: list[int],
     processed_years: list[int],
-    last_vivo_date: str | None,
+    last_live_date: str | None,
     freeze_date_str: str | None,
     live_date_str: str | None,
     full_refresh: bool,
@@ -297,14 +297,14 @@ def extract_data(
     Extract data from source, downloading only what's new.
 
     Returns:
-        Dict with keys: congelado_dfs, vivo_df, vivo_date, is_vivo_new
+        Dict with keys: frozen_dfs, live_df, live_date, is_live_new
 
     """
     result = {
-        "congelado_dfs": {},
-        "vivo_df": None,
-        "vivo_date": None,
-        "is_vivo_new": False,
+        "frozen_dfs": {},
+        "live_df": None,
+        "live_date": None,
+        "is_live_new": False,
     }
 
     for year in years:
@@ -316,17 +316,17 @@ def extract_data(
             continue
 
         if freeze_date_str:
-            df = download_congelado(data_dir, year, freeze_date_str, processed_years)
+            df = download_frozen(data_dir, year, freeze_date_str, processed_years)
             if df is not None:
-                result["congelado_dfs"][year] = df
+                result["frozen_dfs"][year] = df
 
     if live_date_str:
-        vivo_df, is_new = download_vivo(
-            data_dir, current_year, live_date_str, last_vivo_date
+        live_df, is_new = download_live(
+            data_dir, current_year, live_date_str, last_live_date
         )
-        if vivo_df is not None:
-            result["vivo_df"] = vivo_df
-            result["vivo_date"] = live_date_str
-            result["is_vivo_new"] = is_new
+        if live_df is not None:
+            result["live_df"] = live_df
+            result["live_date"] = live_date_str
+            result["is_live_new"] = is_new
 
     return result

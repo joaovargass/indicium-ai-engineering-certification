@@ -4,7 +4,7 @@ from typing import Annotated, Any
 
 from langchain_core.tools import tool
 
-from elt.load import load_srag_data
+from elt.load import NoDataAvailableError, load_srag_data
 from metrics.calculators import (
     calculate_case_increase_rate,
     calculate_icu_occupancy_rate,
@@ -12,6 +12,11 @@ from metrics.calculators import (
     calculate_vaccination_rate,
 )
 from tools.location_utils import determine_location_filter, get_location_description
+
+NO_DATA_MESSAGE = (
+    "Dados não disponíveis. Por favor, clique no botão 'Atualizar Dados' "
+    "no canto superior direito para carregar os dados do SRAG antes de fazer consultas."
+)
 
 
 def _with_location(uf: str | None, city_code: str | None, result: dict) -> dict:
@@ -26,7 +31,10 @@ def get_case_increase_rate(
     period_days: Annotated[int, "Days per period (default: 7)."] = 7,
 ) -> dict[str, Any]:
     """Calculate case increase rate vs previous period. Use for trends, growth analysis."""
-    df = load_srag_data()
+    try:
+        df = load_srag_data()
+    except NoDataAvailableError:
+        return {"error": NO_DATA_MESSAGE}
     location_col, location_value = determine_location_filter(uf, city_code)
     result = calculate_case_increase_rate(
         df,
@@ -41,12 +49,16 @@ def get_case_increase_rate(
 def get_mortality_rate(
     uf: Annotated[str | None, "State code (e.g., 'SP'). None for national."] = None,
     city_code: Annotated[str | None, "IBGE city code. Overrides UF."] = None,
+    lookback_months: Annotated[int | None, "Number of months to look back (default: 12). None for all data."] = 12,
 ) -> dict[str, Any]:
     """Calculate mortality rate (deaths/cases). Use for fatality, death rate queries."""
-    df = load_srag_data()
+    try:
+        df = load_srag_data()
+    except NoDataAvailableError:
+        return {"error": NO_DATA_MESSAGE}
     location_col, location_value = determine_location_filter(uf, city_code)
     result = calculate_mortality_rate(
-        df, location_col=location_col, location_value=location_value
+        df, location_col=location_col, location_value=location_value, lookback_months=lookback_months
     )
     return _with_location(uf, city_code, result)
 
@@ -55,10 +67,13 @@ def get_mortality_rate(
 def get_icu_occupancy_rate(
     uf: Annotated[str | None, "State code (e.g., 'SP'). None for national."] = None,
     city_code: Annotated[str | None, "IBGE city code. Overrides UF."] = None,
-    lookback_days: Annotated[int, "Days to look back (default: 90)."] = 90,
+    lookback_days: Annotated[int, "Days to look back (default: 30)."] = 30,
 ) -> dict[str, Any]:
     """Calculate ICU occupancy rate. Use for hospital capacity queries."""
-    df = load_srag_data()
+    try:
+        df = load_srag_data()
+    except NoDataAvailableError:
+        return {"error": NO_DATA_MESSAGE}
     location_col, location_value = determine_location_filter(uf, city_code)
     result = calculate_icu_occupancy_rate(
         df,
@@ -74,14 +89,19 @@ def get_vaccination_rate(
     uf: Annotated[str | None, "State code (e.g., 'SP'). None for national."] = None,
     city_code: Annotated[str | None, "IBGE city code. Overrides UF."] = None,
     vaccine_type: Annotated[str, "'covid', 'flu', or 'both' (default)."] = "both",
+    lookback_months: Annotated[int | None, "Number of months to look back (default: 12). None for all data."] = 12,
 ) -> dict[str, Any]:
     """Calculate vaccination rates. Use for vaccine coverage queries."""
-    df = load_srag_data()
+    try:
+        df = load_srag_data()
+    except NoDataAvailableError:
+        return {"error": NO_DATA_MESSAGE}
     location_col, location_value = determine_location_filter(uf, city_code)
     result = calculate_vaccination_rate(
         df,
         vaccine_type=vaccine_type,
         location_col=location_col,
         location_value=location_value,
+        lookback_months=lookback_months,
     )
     return _with_location(uf, city_code, result)
