@@ -1,0 +1,38 @@
+---
+config:
+  layout: elk
+  maxWidth: 1200
+---
+flowchart TD
+    Start([ELT Start]) --> FetchDates[Fetch Web Dates<br/>OpenDataSUS Page<br/>Parse freeze_date & live_date]
+    
+    FetchDates --> CheckYear{Check Each Year<br/>2023 2024 2025}
+    
+    CheckYear -->|Frozen| DownloadFrozen[Download Frozen<br/>Parquet Files<br/>INFLUD YY-date.parquet]
+    CheckYear -->|Live| DownloadLive[Download Live<br/>CSV Files<br/>INFLUD YY-date.csv]
+    
+    DownloadFrozen --> ConvertFrozen[Convert to Parquet<br/>frozen_year.parquet]
+    DownloadLive --> ConvertLive[Convert to Parquet<br/>delta_year_date_ts.parquet]
+    
+    ConvertFrozen --> UploadFrozen[Upload to Azure<br/>raw/deltas/frozen_year.parquet]
+    ConvertLive --> UploadLive[Upload to Azure<br/>raw/deltas/delta_year_date_ts.parquet]
+    
+    UploadFrozen --> UpdateState[Update State<br/>raw/state.json<br/>Add to deltas list]
+    UploadLive --> UpdateState
+    
+    UpdateState --> End([Extract Complete])
+    
+    classDef fetchStyle fill:#2563eb,stroke:#1e40af,stroke-width:2px,color:#fff
+    classDef downloadStyle fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
+    classDef convertStyle fill:#ca8a04,stroke:#a16207,stroke-width:2px,color:#fff
+    classDef uploadStyle fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
+    classDef stateStyle fill:#9333ea,stroke:#7e22ce,stroke-width:2px,color:#fff
+    classDef startEndStyle fill:#1e40af,stroke:#1e3a8a,stroke-width:3px,color:#fff
+    
+    class FetchDates,CheckYear fetchStyle
+    class DownloadFrozen,DownloadLive downloadStyle
+    class ConvertFrozen,ConvertLive convertStyle
+    class UploadFrozen,UploadLive uploadStyle
+    class UpdateState stateStyle
+    class Start,End startEndStyle
+

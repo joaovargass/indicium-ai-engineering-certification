@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+    participant User
+    participant UI as Dash UI
+    participant Agent as LangGraph Agent
+    participant Tools as Tools
+    participant Data as Data Layer
+
+    User->>UI: Send Message
+    UI->>Agent: Invoke with History
+    activate Agent
+    
+    Agent->>Agent: Decide Tool Usage
+    
+    alt Tool Needed
+        Agent->>Tools: Execute Tool
+        activate Tools
+        Tools->>Data: Load Data
+        Data-->>Tools: DataFrame
+        Tools->>Tools: Process (Calculate/Plot/Report)
+        Tools-->>Agent: Tool Result
+        deactivate Tools
+    end
+    
+    Agent->>Agent: Generate Response
+    Agent-->>UI: AIMessage with Content
+    deactivate Agent
+    
+    UI->>UI: Parse & Render<br/>Text Charts Reports
+    UI->>User: Display Response
+

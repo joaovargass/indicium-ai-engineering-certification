@@ -8,8 +8,20 @@ import plotly.express as px
 import plotly.io as pio
 from plotly.graph_objects import Figure
 
-# Professional color palette (colorblind-friendly)
-CHART_COLOR = "#2E86AB"
+from common.config import (
+    CHART_ANNOTATION_FONT_SIZE,
+    CHART_BAR_GAP,
+    CHART_COLOR,
+    CHART_FONT_SIZE,
+    CHART_LINE_WIDTH,
+    CHART_MARGIN,
+    CHART_MARKER_SIZE,
+    CHART_TITLE_FONT_SIZE,
+    DEFAULT_CHART_HEIGHT,
+    DEFAULT_CHART_WIDTH,
+    DEFAULT_DAYS,
+    DEFAULT_MONTHS,
+)
 
 
 def figure_to_json(fig: Figure) -> str:
@@ -17,7 +29,12 @@ def figure_to_json(fig: Figure) -> str:
     return fig.to_json()
 
 
-def figure_to_image_file(fig: Figure, file_path: Path, width: int = 1200, height: int = 600) -> Path:
+def figure_to_image_file(
+    fig: Figure,
+    file_path: Path,
+    width: int = DEFAULT_CHART_WIDTH,
+    height: int = DEFAULT_CHART_HEIGHT,
+) -> Path:
     """
     Save Plotly figure as PNG image file.
 
@@ -29,6 +46,7 @@ def figure_to_image_file(fig: Figure, file_path: Path, width: int = 1200, height
 
     Returns:
         Path to saved image file
+
     """
     pio.write_image(fig, str(file_path), format="png", width=width, height=height)
     return file_path
@@ -161,18 +179,18 @@ def _create_line_chart(
     )
 
     fig.update_traces(
-        line=dict(width=3),
-        marker=dict(size=7, line=dict(width=1, color="white")),
+        line=dict(width=CHART_LINE_WIDTH),
+        marker=dict(size=CHART_MARKER_SIZE, line=dict(width=1, color="white")),
         hovertemplate="<b>%{x|%d/%m/%Y}</b><br>%{y:,.0f}<extra></extra>",
     )
 
     fig.update_layout(
         xaxis_title=x_axis_label or "Data",
         yaxis_title=y_axis_label or "Número de Casos",
-        height=600,
-        margin=dict(l=60, r=40, t=80, b=60),
-        title_font=dict(size=20),
-        font=dict(size=12),
+        height=DEFAULT_CHART_HEIGHT,
+        margin=CHART_MARGIN,
+        title_font=dict(size=CHART_TITLE_FONT_SIZE),
+        font=dict(size=CHART_FONT_SIZE),
         hovermode="x unified",
         xaxis=dict(
             showgrid=True,
@@ -229,12 +247,12 @@ def _create_bar_chart(
     fig.update_layout(
         xaxis_title=x_axis_label or "Mês",
         yaxis_title=y_axis_label or "Número de Casos",
-        height=600,
-        margin=dict(l=60, r=40, t=80, b=60),
-        title_font=dict(size=20),
-        font=dict(size=12),
+        height=DEFAULT_CHART_HEIGHT,
+        margin=CHART_MARGIN,
+        title_font=dict(size=CHART_TITLE_FONT_SIZE),
+        font=dict(size=CHART_FONT_SIZE),
         hovermode="x unified",
-        bargap=0.2,
+        bargap=CHART_BAR_GAP,
         xaxis=dict(
             showgrid=False,
             tickformat="%b/%Y",
@@ -264,7 +282,7 @@ def _create_empty_chart(base_title: str, location_value: str | None = None) -> F
                 x=0.5,
                 y=0.5,
                 showarrow=False,
-                font=dict(size=16),
+                font=dict(size=CHART_ANNOTATION_FONT_SIZE),
             )
         ],
     )
@@ -296,7 +314,7 @@ def plot_daily_cases(
     date_col: str = "DT_SIN_PRI",
     location_col: str | None = None,
     location_value: str | None = None,
-    days: int = 30,
+    days: int = DEFAULT_DAYS,
     title: str | None = None,
     x_axis_label: str | None = None,
     y_axis_label: str | None = None,
@@ -332,7 +350,9 @@ def plot_daily_cases(
     chart_title = title or f"Casos Diários - Últimos {days} Dias"
     chart_title = _build_title(chart_title, location_value)
 
-    return _create_line_chart(daily_counts, date_col, "casos", chart_title, x_axis_label, y_axis_label)
+    return _create_line_chart(
+        daily_counts, date_col, "casos", chart_title, x_axis_label, y_axis_label
+    )
 
 
 def plot_monthly_cases(
@@ -340,7 +360,7 @@ def plot_monthly_cases(
     date_col: str = "DT_SIN_PRI",
     location_col: str | None = None,
     location_value: str | None = None,
-    months: int = 12,
+    months: int = DEFAULT_MONTHS,
     title: str | None = None,
     x_axis_label: str | None = None,
     y_axis_label: str | None = None,
@@ -369,109 +389,16 @@ def plot_monthly_cases(
         default_title = title or f"Casos Mensais - Últimos {months} Meses"
         return _create_empty_chart(default_title, location_value)
 
-    # Find the minimum date available in the dataset
     data_min_date = df[date_col].min()
-    
-    # Calculate desired period: last N months from the maximum available date
     desired_start_date = end_date - pd.DateOffset(months=months)
-    
-    # Adjust start_date if dataset doesn't have enough months
-    # Use the maximum of desired_start and actual min_date to ensure we use all available data
     start_date = max(desired_start_date, data_min_date)
-    
+
     df_filtered = _filter_by_date_range(df, date_col, start_date, end_date)
 
     monthly_counts = _aggregate_monthly(df_filtered, date_col)
     chart_title = title or f"Casos Mensais - Últimos {months} Meses"
     chart_title = _build_title(chart_title, location_value)
 
-    return _create_bar_chart(monthly_counts, "ano_mes", "casos", chart_title, x_axis_label, y_axis_label)
-
-
-def plot_daily_range(
-    df: pd.DataFrame,
-    start_date: pd.Timestamp,
-    end_date: pd.Timestamp,
-    date_col: str = "DT_SIN_PRI",
-    location_col: str | None = None,
-    location_value: str | None = None,
-) -> Figure:
-    """
-    Generate daily cases chart for a specific date range.
-
-    Args:
-        df: DataFrame with case data
-        start_date: Start date (inclusive)
-        end_date: End date (inclusive)
-        date_col: Name of date column (default: "DT_SIN_PRI")
-        location_col: Optional location column name (e.g., "SG_UF_NOT")
-        location_value: Optional location value to filter
-
-    Returns:
-        Plotly figure object.
-
-    """
-    df = _prepare_data(df, date_col, location_col, location_value)
-    df_filtered = _filter_by_date_range(df, date_col, start_date, end_date)
-
-    daily_counts = _aggregate_daily(df_filtered, date_col)
-    days = (end_date - start_date).days
-    title = _build_title(
-        f"Casos Diários - {start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')} ({days} dias)",
-        location_value,
+    return _create_bar_chart(
+        monthly_counts, "ano_mes", "casos", chart_title, x_axis_label, y_axis_label
     )
-
-    return _create_line_chart(daily_counts, date_col, "casos", title)
-
-
-def plot_monthly_range(
-    df: pd.DataFrame,
-    start_date: pd.Timestamp,
-    end_date: pd.Timestamp,
-    date_col: str = "DT_SIN_PRI",
-    location_col: str | None = None,
-    location_value: str | None = None,
-) -> Figure:
-    """
-    Generate monthly cases chart for a specific date range.
-
-    Args:
-        df: DataFrame with case data
-        start_date: Start date (inclusive)
-        end_date: End date (inclusive)
-        date_col: Name of date column (default: "DT_SIN_PRI")
-        location_col: Optional location column name (e.g., "SG_UF_NOT")
-        location_value: Optional location value to filter
-
-    Returns:
-        Plotly figure object.
-
-    """
-    df = _prepare_data(df, date_col, location_col, location_value)
-    df_filtered = _filter_by_date_range(df, date_col, start_date, end_date)
-
-    monthly_counts = _aggregate_monthly(df_filtered, date_col)
-
-    month_names = [
-        "Jan",
-        "Fev",
-        "Mar",
-        "Abr",
-        "Mai",
-        "Jun",
-        "Jul",
-        "Ago",
-        "Set",
-        "Out",
-        "Nov",
-        "Dez",
-    ]
-    start_month_name = month_names[start_date.month - 1]
-    end_month_name = month_names[end_date.month - 1]
-
-    title = _build_title(
-        f"Casos Mensais - {start_month_name}/{start_date.year} a {end_month_name}/{end_date.year}",
-        location_value,
-    )
-
-    return _create_bar_chart(monthly_counts, "ano_mes", "casos", title)

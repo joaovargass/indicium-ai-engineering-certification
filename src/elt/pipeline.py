@@ -2,16 +2,20 @@
 
 import sys
 from datetime import datetime
-from pathlib import Path
 
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-SRC_PATH = PROJECT_ROOT / "src"
+from common.config import (
+    CACHE_DIR,
+    DASH_CACHE_PATH,
+    FULL_REFRESH,
+    PRIMARY_KEY_FIELD,
+    PROJECT_ROOT,
+    SRC_PATH,
+)
+
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
-
-from common.config import FULL_REFRESH, PRIMARY_KEY_FIELD  # noqa: E402
 from elt.extract import extract_data, fetch_web_dates, setup_dirs  # noqa: E402
 from elt.load import (  # noqa: E402
     download_unprocessed_deltas,
@@ -21,7 +25,7 @@ from elt.load import (  # noqa: E402
     read_from_dw,
     save_raw_state,
     save_to_dw,
-    update_last_extraction_date,
+    update_extraction_date,
     upload_frozen_delta,
     upload_live_delta,
 )
@@ -34,6 +38,7 @@ def run_incremental_elt() -> str:
 
     Returns:
         ISO format date string of when extraction completed
+
     """
     data_dir, current_year, years = setup_dirs(PROJECT_ROOT)
     local_temp_dir = data_dir / "temp"
@@ -108,22 +113,21 @@ def run_incremental_elt() -> str:
         new_data_loaded = False
 
     # Update local cache only if new data was loaded or cache doesn't exist
-    cache_dir = PROJECT_ROOT / "data" / "cleaned"
-    cache_path = cache_dir / "dash_cache.parquet"
-
-    if new_data_loaded or not cache_path.exists():
+    if new_data_loaded or not DASH_CACHE_PATH.exists():
         try:
             print("Updating local cache from DW...")
             full_df = read_from_dw()
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            full_df.to_parquet(cache_path, index=False)
-            print(f"Local cache updated: {len(full_df):,} rows saved to {cache_path.name}")
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            full_df.to_parquet(DASH_CACHE_PATH, index=False)
+            print(
+                f"Local cache updated: {len(full_df):,} rows saved to {DASH_CACHE_PATH.name}"
+            )
         except Exception as e:
             print(f"Warning: Could not update local cache: {e}")
     else:
         print("No new data loaded, local cache unchanged")
 
     extraction_date = datetime.now().isoformat()
-    update_last_extraction_date(client, extraction_date)
+    update_extraction_date(client, extraction_date)
 
     return extraction_date

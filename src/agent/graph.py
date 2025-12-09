@@ -9,7 +9,6 @@ import time
 import uuid
 from typing import Annotated, Callable, Literal, TypedDict
 
-from dotenv import load_dotenv
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -24,22 +23,8 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from agent.prompts import SYSTEM_PROMPT
+from common.config import DEFAULT_MODEL_NAME, DEFAULT_TEMPERATURE, TOOL_STEP_MAPPING
 from tools import ALL_TOOLS
-
-load_dotenv()
-
-# Tool name to step message mapping
-_TOOL_STEP_MAPPING = {
-    "get_case_increase_rate": "Calculando taxa de aumento de casos...",
-    "get_mortality_rate": "Calculando taxa de mortalidade...",
-    "get_icu_occupancy_rate": "Calculando taxa de ocupação de UTI...",
-    "get_vaccination_rate": "Calculando taxas de vacinação...",
-    "get_daily_chart_json": "Gerando gráfico de casos diários...",
-    "get_monthly_chart_json": "Gerando gráfico de casos mensais...",
-    "generate_download_report": "Gerando relatório completo...",
-    "generate_chat_report": "Gerando relatório interativo...",
-    "search_srag_news_tool": "Buscando notícias de saúde...",
-}
 
 
 class AgentState(TypedDict):
@@ -49,7 +34,7 @@ class AgentState(TypedDict):
     thread_id: str
 
 
-def _convert_ui_messages_to_langchain(ui_messages: list[dict]) -> list[BaseMessage]:
+def _to_langchain_messages(ui_messages: list[dict]) -> list[BaseMessage]:
     """
     Convert UI message format to LangChain message objects.
 
@@ -115,7 +100,59 @@ def create_agent_node(llm: ChatOpenAI) -> Callable[[AgentState], AgentState]:
     return agent_node
 
 
-def create_sequential_tool_node(
+def _extract_tool_call_info(tool_call: dict | object) -> tuple[str, str, dict]:
+    """
+    Extract tool name, id, and args from a tool call.
+
+    Args:
+        tool_call: Tool call as dict or Pydantic ToolCall object
+
+    Returns:
+        Tuple of (tool_name, tool_id, tool_args)
+
+    """
+    if isinstance(tool_call, dict):
+        return (
+            tool_call.get("name", ""),
+            tool_call.get("id", ""),
+            tool_call.get("args", {}),
+        )
+    return (
+        getattr(tool_call, "name", ""),
+        getattr(tool_call, "id", ""),
+        getattr(tool_call, "args", {}),
+    )
+
+
+def _execute_tool(tool: object, tool_args: dict, tool_id: str) -> ToolMessage:
+    """
+    Execute a single tool and return the result as a ToolMessage.
+
+    Args:
+        tool: The tool to execute
+        tool_args: Arguments to pass to the tool
+        tool_id: Tool call ID for the response message
+
+    Returns:
+        ToolMessage with result or error content
+
+    """
+    try:
+        result = tool.invoke(tool_args)
+        if isinstance(result, dict):
+            import json
+
+            content = json.dumps(result, ensure_ascii=False)
+        else:
+            content = str(result)
+        return ToolMessage(content=content, tool_call_id=tool_id)
+    except (ValueError, KeyError, TypeError) as e:
+        return ToolMessage(content=f"Error: {e}", tool_call_id=tool_id)
+    except Exception as e:
+        return ToolMessage(content=f"Error: {e}", tool_call_id=tool_id)
+
+
+def create_tool_node(
     tools: list, step_callback: Callable[[str], None] | None = None
 ) -> Callable[[AgentState], AgentState]:
     """
@@ -129,74 +166,35 @@ def create_sequential_tool_node(
         Function that takes state and returns updated state with tool results
 
     """
-    # Create a tool lookup dictionary
     tool_dict = {tool.name: tool for tool in tools}
 
     def sequential_tool_node(state: AgentState) -> AgentState:
         """Execute tools sequentially, updating callback for each."""
         messages = state["messages"]
-        tool_messages = []
-
-        # Get the last message which should contain tool calls
         last_message = messages[-1]
+
         if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
             return {"messages": []}
 
-        # Execute each tool call sequentially
-        for tool_call in last_message.tool_calls:
-            # Handle both dict and ToolCall object formats
-            if isinstance(tool_call, dict):
-                tool_name = tool_call.get("name", "")
-                tool_id = tool_call.get("id", "")
-                tool_args = tool_call.get("args", {})
-            else:
-                # ToolCall object (Pydantic model) - access attributes directly
-                tool_name = getattr(tool_call, "name", "")
-                tool_id = getattr(tool_call, "id", "")
-                tool_args = getattr(tool_call, "args", {})
+        tool_messages = []
 
-            # Update step callback before executing tool
+        for tool_call in last_message.tool_calls:
+            tool_name, tool_id, tool_args = _extract_tool_call_info(tool_call)
+
             if step_callback:
-                step_message = _TOOL_STEP_MAPPING.get(
+                step_message = TOOL_STEP_MAPPING.get(
                     tool_name, f"Executando {tool_name}..."
                 )
                 step_callback(step_message)
-                # Keep message visible for at least 1 second
                 time.sleep(1.0)
 
-            # Get the tool and execute it
             if tool_name in tool_dict:
-                tool = tool_dict[tool_name]
-                try:
-                    # Execute the tool
-                    result = tool.invoke(tool_args)
+                tool_message = _execute_tool(tool_dict[tool_name], tool_args, tool_id)
+                tool_messages.append(tool_message)
 
-                    # Convert result to string if needed
-                    if isinstance(result, dict):
-                        import json
-                        content = json.dumps(result, ensure_ascii=False)
-                    else:
-                        content = str(result)
-
-                    # Create tool message
-                    tool_message = ToolMessage(
-                        content=content,
-                        tool_call_id=tool_id,
-                    )
-                    tool_messages.append(tool_message)
-                except Exception as e:
-                    # Create error message
-                    error_content = f"Error: {str(e)}"
-                    tool_message = ToolMessage(
-                        content=error_content,
-                        tool_call_id=tool_id,
-                    )
-                    tool_messages.append(tool_message)
-
-        # After all tools complete, show processing message
         if step_callback and tool_messages:
             step_callback("Processando resultados...")
-            time.sleep(0.5)  # Brief pause to show the message
+            time.sleep(0.5)
 
         return {"messages": tool_messages}
 
@@ -204,27 +202,12 @@ def create_sequential_tool_node(
 
 
 def should_continue(state: AgentState) -> Literal["tools", "end"]:
-    """
-    Route to tools node if agent has tool calls (agent interpreted confirmation).
-
-    The agent uses LLM interpretation to determine if user confirmed.
-    If agent calls tools, it means it interpreted the user's message as confirmation.
-
-    Args:
-        state: Current graph state
-
-    Returns:
-        "tools" if agent wants to call tools, "end" otherwise
-
-    """
+    """Route to tools node if agent has tool calls, otherwise end."""
     messages = state["messages"]
     if not messages:
         return "end"
 
     last_message = messages[-1]
-
-    # If agent has tool calls, it means it interpreted user confirmation
-    # Trust the agent's LLM-based interpretation
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "tools"
 
@@ -232,8 +215,8 @@ def should_continue(state: AgentState) -> Literal["tools", "end"]:
 
 
 def create_agent_graph(
-    model_name: str = "gpt-5-nano",
-    temperature: float = 0.0,
+    model_name: str = DEFAULT_MODEL_NAME,
+    temperature: float = DEFAULT_TEMPERATURE,
     use_checkpointer: bool = False,
     step_callback: Callable[[str], None] | None = None,
 ) -> StateGraph:
@@ -256,7 +239,7 @@ def create_agent_graph(
 
     # Use sequential tool node if callback provided, otherwise use parallel ToolNode
     if step_callback:
-        tools = create_sequential_tool_node(ALL_TOOLS, step_callback)
+        tools = create_tool_node(ALL_TOOLS, step_callback)
     else:
         tools = ToolNode(ALL_TOOLS)
 
@@ -313,26 +296,17 @@ def _invoke_with_streaming(
     final_state = None
 
     try:
-        # Use stream_mode="values" to get full accumulated state after each node
         for state in graph.stream(initial_state, config=config, stream_mode="values"):
-            # state is the full accumulated state after each node execution
             messages = state.get("messages", [])
             if messages:
                 last_msg = messages[-1]
-                # Check if last message is an AI message with tool calls (agent deciding to use tools)
-                if isinstance(last_msg, AIMessage) and hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
-                    # Agent decided to use tools - show preparation message before tools execute
+                if (
+                    isinstance(last_msg, AIMessage)
+                    and hasattr(last_msg, "tool_calls")
+                    and last_msg.tool_calls
+                ):
                     step_callback("Preparando análise...")
-                # Check if last message is a ToolMessage (tools finished executing)
-                # Note: sequential_tool_node already shows "Compilando métricas..." after all tools
-                # So we don't override here - the tool node messages take precedence
-                elif isinstance(last_msg, ToolMessage):
-                    # Tools are executing - sequential_tool_node handles the messages
-                    # Don't override with generic message
-                    pass
-                # Final AI message (no tool calls = final response)
-                elif isinstance(last_msg, AIMessage) and not (hasattr(last_msg, "tool_calls") and last_msg.tool_calls):
-                    # Agent is generating final response after processing tool results
+                elif isinstance(last_msg, AIMessage):
                     step_callback("Gerando resposta...")
 
             final_state = state
@@ -352,8 +326,8 @@ def _invoke_with_streaming(
 def invoke_agent(
     message: str,
     thread_id: str | None = None,
-    model_name: str = "gpt-5-nano",
-    temperature: float = 0.0,
+    model_name: str = DEFAULT_MODEL_NAME,
+    temperature: float = DEFAULT_TEMPERATURE,
     step_callback: Callable[[str], None] | None = None,
     conversation_history: list[BaseMessage] | None = None,
 ) -> dict:

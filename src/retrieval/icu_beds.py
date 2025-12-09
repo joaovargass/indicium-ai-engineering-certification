@@ -4,61 +4,20 @@ import json
 import unicodedata
 from datetime import datetime, timedelta
 from io import StringIO
-from pathlib import Path
 
 import pandas as pd
 import requests
 
-# Cache configuration
-CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "cleaned"
-CACHE_FILE = CACHE_DIR / "icu_beds_cache.json"
-CACHE_TTL_DAYS = 7
-
-# CNES API URLs
-CNES_LEITOS_URL_TEMPLATE = (
-    "https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/Leitos_SUS/Leitos_{year}.csv"
+from common.config import (
+    CACHE_DIR,
+    CNES_LEITOS_URL_TEMPLATE,
+    FALLBACK_BRAZIL_TOTAL,
+    FALLBACK_ICU_BEDS,
+    IBGE_STATE_TO_UF,
+    ICU_BEDS_CACHE_PATH,
+    ICU_BEDS_CACHE_TTL_DAYS,
+    ICU_BEDS_REQUEST_TIMEOUT_SECONDS,
 )
-
-# Fallback static data (Dec 2024) - used if API unavailable
-FALLBACK_ICU_BEDS = {
-    "SP": 15695,
-    "RJ": 8456,
-    "MG": 5894,
-    "PR": 3731,
-    "BA": 3299,
-    "RS": 2996,
-    "PE": 2917,
-    "GO": 2156,
-    "DF": 2089,
-    "SC": 1942,
-    "CE": 1833,
-    "ES": 1724,
-    "PA": 1622,
-    "MA": 1234,
-    "MT": 1185,
-    "PB": 1009,
-    "RN": 834,
-    "AM": 808,
-    "MS": 761,
-    "AL": 697,
-    "RO": 640,
-    "PI": 564,
-    "SE": 491,
-    "TO": 428,
-    "AP": 185,
-    "AC": 106,
-    "RR": 105,
-}
-FALLBACK_BRAZIL_TOTAL = 63401
-
-# Mapping from IBGE state code (first 2 digits) to UF
-IBGE_STATE_TO_UF = {
-    "11": "RO", "12": "AC", "13": "AM", "14": "RR", "15": "PA", "16": "AP", "17": "TO",
-    "21": "MA", "22": "PI", "23": "CE", "24": "RN", "25": "PB", "26": "PE", "27": "AL",
-    "28": "SE", "29": "BA",
-    "31": "MG", "32": "ES", "33": "RJ", "35": "SP", "41": "PR", "42": "SC", "43": "RS",
-    "50": "MS", "51": "MT", "52": "GO", "53": "DF",
-}
 
 
 def _normalize_city_name(name: str) -> str:
@@ -70,6 +29,7 @@ def _normalize_city_name(name: str) -> str:
 
     Returns:
         Normalized name (e.g., "SAO PAULO")
+
     """
     nfd = unicodedata.normalize("NFD", name)
     without_accents = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
@@ -78,15 +38,15 @@ def _normalize_city_name(name: str) -> str:
 
 def _load_cache() -> dict | None:
     """Load cached ICU bed data if valid."""
-    if not CACHE_FILE.exists():
+    if not ICU_BEDS_CACHE_PATH.exists():
         return None
 
     try:
-        with open(CACHE_FILE) as f:
+        with open(ICU_BEDS_CACHE_PATH) as f:
             cache = json.load(f)
 
         cached_at = datetime.fromisoformat(cache.get("cached_at", ""))
-        if datetime.now() - cached_at > timedelta(days=CACHE_TTL_DAYS):
+        if datetime.now() - cached_at > timedelta(days=ICU_BEDS_CACHE_TTL_DAYS):
             return None
 
         # Convert string keys back to tuples
@@ -107,7 +67,9 @@ def _save_cache(data: dict) -> None:
 
     # Convert tuple keys to strings for JSON serialization
     icu_beds_by_city = data.get("icu_beds_by_city", {})
-    icu_beds_by_city_str = {f"{uf}|{city}": beds for (uf, city), beds in icu_beds_by_city.items()}
+    icu_beds_by_city_str = {
+        f"{uf}|{city}": beds for (uf, city), beds in icu_beds_by_city.items()
+    }
 
     cache = {
         "cached_at": datetime.now().isoformat(),
@@ -117,7 +79,7 @@ def _save_cache(data: dict) -> None:
         "brazil_total": data.get("brazil_total"),
     }
 
-    with open(CACHE_FILE, "w") as f:
+    with open(ICU_BEDS_CACHE_PATH, "w") as f:
         json.dump(cache, f, indent=2)
 
 
@@ -129,7 +91,7 @@ def _fetch_from_api(year: int | None = None) -> dict | None:
     url = CNES_LEITOS_URL_TEMPLATE.format(year=year)
 
     try:
-        response = requests.get(url, timeout=120)
+        response = requests.get(url, timeout=ICU_BEDS_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
 
         df = pd.read_csv(
@@ -140,25 +102,21 @@ def _fetch_from_api(year: int | None = None) -> dict | None:
             dtype=str,
         )
 
-        # Convert numeric columns
-        numeric_cols = ["UTI_TOTAL_EXIST", "COMP"]
-        for col in numeric_cols:
+        for col in ["UTI_TOTAL_EXIST", "COMP"]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        # Get latest competency
         latest_comp = df["COMP"].max()
         df_latest = df[df["COMP"] == latest_comp]
 
-        # Aggregate by UF
         icu_by_uf = df_latest.groupby("UF")["UTI_TOTAL_EXIST"].sum().to_dict()
         brazil_total = int(df_latest["UTI_TOTAL_EXIST"].sum())
-
-        # Convert to int
         icu_by_uf = {k: int(v) for k, v in icu_by_uf.items()}
-
-        # Aggregate by city (UF + MUNICIPIO)
-        city_beds = df_latest.groupby(["UF", "MUNICIPIO"])["UTI_TOTAL_EXIST"].sum().reset_index()
+        city_beds = (
+            df_latest.groupby(["UF", "MUNICIPIO"])["UTI_TOTAL_EXIST"]
+            .sum()
+            .reset_index()
+        )
         icu_by_city = {}
         for _, row in city_beds.iterrows():
             uf = row["UF"]
@@ -219,7 +177,7 @@ def get_icu_beds_data(force_refresh: bool = False) -> dict:
     }
 
 
-def get_icu_beds_for_location(
+def get_location_icu_beds(
     uf: str | None = None,
     city_code: str | None = None,
 ) -> tuple[int | None, str]:
@@ -239,29 +197,23 @@ def get_icu_beds_for_location(
     source = f"CNES {data.get('competency', 'N/A')} ({data.get('source', 'unknown')})"
 
     if city_code:
-        # Convert IBGE code to city name
-        from tools.location_utils import get_city_name_from_code
+        from tools.location_utils import resolve_city_name
 
-        city_name = get_city_name_from_code(city_code)
+        city_name = resolve_city_name(city_code)
         if not city_name:
             return None, "city not found"
 
-        # Normalize city name to match CNES format
         normalized_city = _normalize_city_name(city_name)
-
-        # Extract UF from IBGE code (first 2 digits)
         state_code = str(city_code)[:2]
         uf_from_code = IBGE_STATE_TO_UF.get(state_code)
         if not uf_from_code:
             return None, "invalid city code"
 
-        # Lookup in city-level data
         city_key = (uf_from_code, normalized_city)
         beds = data.get("icu_beds_by_city", {}).get(city_key)
         if beds is not None:
             return beds, source
 
-        # If not found, return None
         return None, "city-level ICU data not found in CNES"
 
     if uf:
@@ -271,5 +223,3 @@ def get_icu_beds_for_location(
 
     # National total
     return data.get("brazil_total"), source
-
-

@@ -1,0 +1,21 @@
+flowchart LR
+    Start([Start]) --> Extract[Extract<br/>Download from OpenDataSUS<br/>Upload to Azure Data Lake]
+    Extract --> Load[Load<br/>Combine Deltas<br/>Upload to Synapse]
+    Load --> Transform[Transform<br/>9 Cleaning Steps<br/>Data Validation<br/>Update Cache]
+    Transform --> End([Complete])
+    
+    State[State Files<br/>raw/state.json<br/>dw_state.json] -.->|Track Progress| Extract
+    State -.->|Track Progress| Load
+    
+    classDef extractStyle fill:#2563eb,stroke:#1e40af,stroke-width:3px,color:#fff
+    classDef transformStyle fill:#ca8a04,stroke:#a16207,stroke-width:3px,color:#fff
+    classDef loadStyle fill:#059669,stroke:#047857,stroke-width:3px,color:#fff
+    classDef stateStyle fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
+    classDef startEndStyle fill:#1e40af,stroke:#1e3a8a,stroke-width:3px,color:#fff
+    
+    class Extract extractStyle
+    class Transform transformStyle
+    class Load loadStyle
+    class State stateStyle
+    class Start,End startEndStyle
+
