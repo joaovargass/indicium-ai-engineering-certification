@@ -1,0 +1,61 @@
+---
+config:
+  layout: elk
+  maxWidth: 1200
+---
+flowchart TB
+    Agent[Agent] -->|Calls| Tools[Tools Layer<br/>9 Tools Available]
+    
+    subgraph METRIC_TOOLS["Metric Tools - 4 Tools"]
+        direction TB
+        M1[get_case_increase_rate<br/>Period comparison]
+        M2[get_mortality_rate<br/>Deaths/Cases ratio]
+        M3[get_icu_occupancy_rate<br/>ICU capacity]
+        M4[get_vaccination_rate<br/>Vaccine coverage]
+    end
+    
+    subgraph CHART_TOOLS["Chart Tools - 2 Tools"]
+        direction TB
+        C1[get_daily_chart_json<br/>Plotly JSON]
+        C2[get_monthly_chart_json<br/>Plotly JSON]
+    end
+    
+    subgraph REPORT_TOOLS["Report Tools - 2 Tools"]
+        direction TB
+        R1[generate_download_report<br/>Markdown + ZIP]
+        R2[generate_chat_report<br/>Markdown + JSON charts]
+    end
+    
+    subgraph NEWS_TOOL["News Tool - 1 Tool"]
+        direction TB
+        N1[search_srag_news_tool<br/>Tavily API]
+    end
+    
+    Tools --> METRIC_TOOLS
+    Tools --> CHART_TOOLS
+    Tools --> REPORT_TOOLS
+    Tools --> NEWS_TOOL
+    
+    METRIC_TOOLS -->|Uses| Data[Data Layer<br/>load_srag_data]
+    CHART_TOOLS -->|Uses| Data
+    REPORT_TOOLS -->|Uses| Data
+    REPORT_TOOLS -->|Calls| METRIC_TOOLS
+    REPORT_TOOLS -->|Calls| CHART_TOOLS
+    REPORT_TOOLS -->|Calls| NEWS_TOOL
+    
+    classDef agentStyle fill:#ea580c,stroke:#c2410c,stroke-width:3px,color:#fff
+    classDef toolsStyle fill:#9333ea,stroke:#7e22ce,stroke-width:3px,color:#fff
+    classDef metricStyle fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
+    classDef chartStyle fill:#be185d,stroke:#9f1239,stroke-width:2px,color:#fff
+    classDef reportStyle fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
+    classDef newsStyle fill:#64748b,stroke:#475569,stroke-width:2px,color:#fff
+    classDef dataStyle fill:#1e40af,stroke:#1e3a8a,stroke-width:2px,color:#fff
+    
+    class Agent agentStyle
+    class Tools toolsStyle
+    class M1,M2,M3,M4 metricStyle
+    class C1,C2 chartStyle
+    class R1,R2 reportStyle
+    class N1 newsStyle
+    class Data dataStyle
+

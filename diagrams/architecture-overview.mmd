@@ -1,0 +1,27 @@
+flowchart LR
+    User[User] --> UI[Dash UI]
+    UI --> Agent[LangGraph Agent]
+    Agent -->|Tool Calls| Tools[9 Tools<br/>Metrics Charts Reports News]
+    Tools -->|Data Access| Data[Data Layer<br/>Cache + Azure Synapse]
+    Tools -->|External APIs| APIs[CNES API<br/>Tavily API]
+    Agent -->|Response| UI
+    UI --> User
+    
+    ELT[ELT Pipeline] -->|Extract| Source[OpenDataSUS]
+    ELT -->|Load| Data
+    Data -->|Read| Tools
+    
+    classDef uiStyle fill:#2563eb,stroke:#1e40af,stroke-width:3px,color:#fff
+    classDef agentStyle fill:#ea580c,stroke:#c2410c,stroke-width:3px,color:#fff
+    classDef toolsStyle fill:#9333ea,stroke:#7e22ce,stroke-width:3px,color:#fff
+    classDef dataStyle fill:#059669,stroke:#047857,stroke-width:3px,color:#fff
+    classDef eltStyle fill:#ca8a04,stroke:#a16207,stroke-width:3px,color:#fff
+    classDef externalStyle fill:#64748b,stroke:#475569,stroke-width:2px,color:#fff
+    
+    class User,UI uiStyle
+    class Agent agentStyle
+    class Tools toolsStyle
+    class Data dataStyle
+    class ELT eltStyle
+    class Source,APIs externalStyle
+

@@ -1,0 +1,39 @@
+---
+config:
+  layout: elk
+---
+flowchart LR
+    Tool[Tool Call] -->|load_srag_data| LoadData[Load SRAG Data<br/>DataFrame]
+    
+    LoadData --> Filter[Apply Location Filter<br/>UF or City Code]
+    
+    Filter -->|Case Increase| Calc1[calculate_case_growth<br/>Compare periods]
+    Filter -->|Mortality| Calc2[calculate_mortality_rate<br/>Deaths / Cases]
+    Filter -->|ICU Occupancy| Calc3[calculate_icu_occupancy_rate<br/>ICU Beds / Cases]
+    Filter -->|Vaccination| Calc4[calculate_vaccination_rate<br/>Vaccinated / Cases]
+    
+    Calc3 -->|Needs Beds Data| CNES[CNES API<br/>ICU Beds Data<br/>Cached 7 days]
+    CNES --> Calc3
+    
+    Calc1 --> Format1[Format Result<br/>Add Location]
+    Calc2 --> Format2[Format Result<br/>Add Location]
+    Calc3 --> Format3[Format Result<br/>Add Location]
+    Calc4 --> Format4[Format Result<br/>Add Location]
+    
+    Format1 --> Return1[Return Dict]
+    Format2 --> Return2[Return Dict]
+    Format3 --> Return3[Return Dict]
+    Format4 --> Return4[Return Dict]
+    
+    classDef toolStyle fill:#9333ea,stroke:#7e22ce,stroke-width:3px,color:#fff
+    classDef loadStyle fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
+    classDef calcStyle fill:#ea580c,stroke:#c2410c,stroke-width:2px,color:#fff
+    classDef formatStyle fill:#ca8a04,stroke:#a16207,stroke-width:2px,color:#fff
+    classDef externalStyle fill:#64748b,stroke:#475569,stroke-width:2px,color:#fff
+    
+    class Tool toolStyle
+    class LoadData,Filter loadStyle
+    class Calc1,Calc2,Calc3,Calc4 calcStyle
+    class Format1,Format2,Format3,Format4,Return1,Return2,Return3,Return4 formatStyle
+    class CNES externalStyle
+

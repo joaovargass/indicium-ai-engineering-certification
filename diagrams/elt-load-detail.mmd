@@ -1,0 +1,43 @@
+---
+config:
+  layout: elk
+  maxWidth: 1200
+---
+flowchart TD
+    Start([Load Phase Start]) --> ReadState[Read DW State<br/>clean/dw_state.json<br/>Get processed_deltas]
+    
+    ReadState --> DownloadDeltas[Download Unprocessed<br/>Deltas from Azure<br/>raw/deltas/]
+    
+    DownloadDeltas -->|For Each Delta| LoadDelta[Load Delta File<br/>Read Parquet]
+    LoadDelta --> TransformDelta[Transform Delta<br/>Apply 9 Transform Steps]
+    TransformDelta --> NextDelta{More<br/>Deltas?}
+    NextDelta -->|Yes| LoadDelta
+    NextDelta -->|No| Combine[Combine All Deltas<br/>pd.concat<br/>Single DataFrame]
+    
+    Combine --> PreparePK[Prepare Primary Key<br/>Convert NU_NOTIFIC<br/>to Int64]
+    PreparePK --> UploadStaging[Upload to Staging<br/>Azure Data Lake<br/>staging/timestamp_id/]
+    
+    UploadStaging --> CopyInto[COPY INTO Synapse<br/>dbo.srag_cleaned<br/>Merge by NU_NOTIFIC]
+    
+    CopyInto --> UpdateDWState[Update DW State<br/>clean/dw_state.json<br/>Mark deltas processed]
+    
+    UpdateDWState --> UpdateCache[Update Local Cache<br/>data/cleaned/dash_cache.parquet<br/>Full dataset]
+    
+    UpdateCache --> End([Load Complete])
+    
+    classDef stateStyle fill:#9333ea,stroke:#7e22ce,stroke-width:2px,color:#fff
+    classDef downloadStyle fill:#2563eb,stroke:#1e40af,stroke-width:2px,color:#fff
+    classDef transformStyle fill:#ca8a04,stroke:#a16207,stroke-width:2px,color:#fff
+    classDef uploadStyle fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
+    classDef dwStyle fill:#059669,stroke:#047857,stroke-width:2px,color:#fff
+    classDef cacheStyle fill:#1e40af,stroke:#1e3a8a,stroke-width:2px,color:#fff
+    classDef startEndStyle fill:#1e40af,stroke:#1e3a8a,stroke-width:3px,color:#fff
+    
+    class ReadState,UpdateDWState stateStyle
+    class DownloadDeltas,LoadDelta downloadStyle
+    class TransformDelta,Combine,PreparePK transformStyle
+    class UploadStaging uploadStyle
+    class CopyInto dwStyle
+    class UpdateCache cacheStyle
+    class Start,End startEndStyle
+

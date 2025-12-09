@@ -277,6 +277,18 @@ Ask questions in Portuguese about SRAG data:
 │   │   └── news_fetcher.py     # Tavily news API integration
 │   └── common/                  # Shared configuration and utilities
 │       └── config.py            # Centralized configuration constants
+├── diagrams/                   # Architecture diagrams (Mermaid)
+│   ├── architecture-overview.mmd
+│   ├── agent-flow.mmd
+│   ├── elt-pipeline.mmd
+│   ├── user-interaction-sequence.mmd
+│   ├── tools-detail.mmd
+│   ├── data-flow-detail.mmd
+│   ├── elt-extract-detail.mmd
+│   ├── elt-transform-steps.mmd
+│   ├── elt-load-detail.mmd
+│   ├── metrics-calculation-flow.mmd
+│   └── report-generation-flow.mmd
 ├── scripts/
 │   └── azure-setup.sh          # Azure infrastructure setup script
 ├── assets/
@@ -286,15 +298,181 @@ Ask questions in Portuguese about SRAG data:
 
 ### Architecture Overview
 
+**High-level system architecture showing the main components and data flow.**
+
+<div align="center">
+
+```mermaid
+flowchart LR
+    User[User] --> UI[Dash UI]
+    UI --> Agent[LangGraph Agent]
+    Agent -->|Tool Calls| Tools[9 Tools<br/>Metrics Charts Reports News]
+    Tools -->|Data Access| Data[Data Layer<br/>Cache + Azure Synapse]
+    Tools -->|External APIs| APIs[CNES API<br/>Tavily API]
+    Agent -->|Response| UI
+    UI --> User
+    
+    ELT[ELT Pipeline] -->|Extract| Source[OpenDataSUS]
+    ELT -->|Load| Data
+    Data -->|Read| Tools
+    
+    classDef uiStyle fill:#2563eb,stroke:#1e40af,stroke-width:3px,color:#fff
+    classDef agentStyle fill:#ea580c,stroke:#c2410c,stroke-width:3px,color:#fff
+    classDef toolsStyle fill:#9333ea,stroke:#7e22ce,stroke-width:3px,color:#fff
+    classDef dataStyle fill:#059669,stroke:#047857,stroke-width:3px,color:#fff
+    classDef eltStyle fill:#ca8a04,stroke:#a16207,stroke-width:3px,color:#fff
+    classDef externalStyle fill:#64748b,stroke:#475569,stroke-width:2px,color:#fff
+    
+    class User,UI uiStyle
+    class Agent agentStyle
+    class Tools toolsStyle
+    class Data dataStyle
+    class ELT eltStyle
+    class Source,APIs externalStyle
+```
+
+</div>
+
 The application follows a modular architecture with clear separation of concerns:
 
-- **UI Layer** (`src/ui/`): All Dash components, callbacks, and UI-related logic
-- **Agent Layer** (`src/agent/`): LangGraph agent definition and prompt management
-- **Tools Layer** (`src/tools/`): LangChain tools that the agent can call
-- **Data Layer** (`src/elt/`, `src/charts/`, `src/metrics/`): Data processing, transformation, and calculations
-- **Report Layer** (`src/report/`): Report generation with LLM integration
-- **Retrieval Layer** (`src/retrieval/`): External API integrations (CNES, Tavily)
-- **Common Layer** (`src/common/`): Shared configuration and constants
+- **UI Layer** ([`src/ui/`](src/ui/README.md)): All Dash components, callbacks, and UI-related logic
+- **Agent Layer** ([`src/agent/`](src/agent/README.md)): LangGraph agent definition and prompt management
+- **Tools Layer** ([`src/tools/`](src/tools/README.md)): LangChain tools that the agent can call
+- **Data Layer** ([`src/elt/`](src/elt/README.md), [`src/charts/`](src/charts/README.md), [`src/metrics/`](src/metrics/README.md)): Data processing, transformation, and calculations
+- **Report Layer** ([`src/report/`](src/report/README.md)): Report generation with LLM integration
+- **Retrieval Layer** ([`src/retrieval/`](src/retrieval/README.md)): External API integrations (CNES, Tavily)
+- **Common Layer** ([`src/common/`](src/common/README.md)): Shared configuration and constants
+
+### Module Documentation
+
+Each module has detailed documentation:
+
+- **[Agent Module](src/agent/README.md)** - LangGraph conversational AI agent
+- **[Charts Module](src/charts/README.md)** - Plotly visualization and statistics
+- **[Common Module](src/common/README.md)** - Centralized configuration
+- **[ELT Module](src/elt/README.md)** - Incremental data pipeline
+- **[Metrics Module](src/metrics/README.md)** - Epidemiological calculations
+- **[Report Module](src/report/README.md)** - LLM-powered report generation
+- **[Retrieval Module](src/retrieval/README.md)** - External data fetching
+- **[Tools Module](src/tools/README.md)** - LangChain tool wrappers
+- **[UI Module](src/ui/README.md)** - Dash web interface
+
+---
+
+## Architecture & Governance
+
+### Architecture Design
+
+**Agent decision flow: how the LangGraph agent processes user queries and orchestrates tool execution.**
+
+<div align="center">
+
+```mermaid
+flowchart LR
+    Start([User Message]) --> Agent[Agent<br/>LLM Decision]
+    Agent -->|Needs Tools| Tools[Execute Tools<br/>9 Available]
+    Tools -->|Results| Agent
+    Agent -->|Final Answer| Response[Response to User]
+    Response --> End([End])
+    
+    classDef agentStyle fill:#ea580c,stroke:#c2410c,stroke-width:3px,color:#fff
+    classDef toolsStyle fill:#9333ea,stroke:#7e22ce,stroke-width:3px,color:#fff
+    classDef responseStyle fill:#059669,stroke:#047857,stroke-width:3px,color:#fff
+    classDef startEndStyle fill:#1e40af,stroke:#1e3a8a,stroke-width:3px,color:#fff
+    
+    class Agent agentStyle
+    class Tools toolsStyle
+    class Response responseStyle
+    class Start,End startEndStyle
+```
+
+</div>
+
+**ELT pipeline overview: the three main phases (Extract, Load, Transform) with state management.**
+
+<div align="center">
+
+```mermaid
+flowchart LR
+    Start([Start]) --> Extract[Extract<br/>Download from OpenDataSUS<br/>Upload to Azure Data Lake]
+    Extract --> Load[Load<br/>Combine Deltas<br/>Upload to Synapse]
+    Load --> Transform[Transform<br/>9 Cleaning Steps<br/>Data Validation<br/>Update Cache]
+    Transform --> End([Complete])
+    
+    State[State Files<br/>raw/state.json<br/>dw_state.json] -.->|Track Progress| Extract
+    State -.->|Track Progress| Load
+    
+    classDef extractStyle fill:#2563eb,stroke:#1e40af,stroke-width:3px,color:#fff
+    classDef transformStyle fill:#ca8a04,stroke:#a16207,stroke-width:3px,color:#fff
+    classDef loadStyle fill:#059669,stroke:#047857,stroke-width:3px,color:#fff
+    classDef stateStyle fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
+    classDef startEndStyle fill:#1e40af,stroke:#1e3a8a,stroke-width:3px,color:#fff
+    
+    class Extract extractStyle
+    class Transform transformStyle
+    class Load loadStyle
+    class State stateStyle
+    class Start,End startEndStyle
+```
+
+</div>
+
+**Complete user interaction sequence from message input to response display, including tool execution and data access.**
+
+<div align="center">
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User
+    participant UI as Dash UI
+    participant Agent as LangGraph Agent
+    participant Tools as Tools
+    participant Data as Data Layer
+
+    User->>UI: Send Message
+    UI->>Agent: Invoke with History
+    activate Agent
+    
+    Agent->>Agent: Decide Tool Usage
+    
+    alt Tool Needed
+        Agent->>Tools: Execute Tool
+        activate Tools
+        Tools->>Data: Load Data
+        Data-->>Tools: DataFrame
+        Tools->>Tools: Process (Calculate/Plot/Report)
+        Tools-->>Agent: Tool Result
+        deactivate Tools
+    end
+    
+    Agent->>Agent: Generate Response
+    Agent-->>UI: AIMessage with Content
+    deactivate Agent
+    
+    UI->>UI: Parse & Render<br/>Text Charts Reports
+    UI->>User: Display Response
+```
+
+</div>
+
+The platform follows a modular, layered architecture with clear separation of concerns. The **LangGraph StateGraph** orchestrates agent decisions through a defined workflow: Agent Node → Router → Tool Node → Agent Node. Data flows through an incremental ELT pipeline (Extract → Load → Transform) with delta-based updates stored in Azure Data Lake Gen2 and processed in Azure Synapse Analytics. The architecture uses centralized configuration (`common.config`), local caching for performance, and a tool-based abstraction layer between the agent and data operations.
+
+### Governance & Transparency
+
+Agent decisions are tracked through the `AgentState` structure, which maintains conversation history (`messages`) with thread isolation via `thread_id`. All tool calls are recorded as `ToolMessage` objects in the message history. The ELT pipeline maintains state files in Azure (`raw/state.json`, `clean/dw_state.json`) tracking processed deltas, extraction dates, and processing timestamps. Pipeline execution logs each transformation step, data quality metrics, and schema analysis. All metric responses include a "Fonte de Dados" (Data Source) column indicating the data origin.
+
+### Guardrails
+
+Comprehensive guardrails are enforced through the 495-line `SYSTEM_PROMPT` defining non-negotiable rules: **Geographic scope** (Brazil-only, validates location before tool calls), **Medical advice** (prohibits treatment recommendations, redirects to health authorities), **Patient data** (aggregated data only, no PII access), **Harmful content** (requires tool verification before stating numbers, mandates source citations), and **Speculation** (prohibits predictions without data). The agent is instructed to "ALWAYS call tools before stating numbers - never hallucinate" and all tool outputs are validated before presentation. Parameter validation enforces limits (chart days: 7-90, months: 1-24, news: 0-5).
+
+### Sensitive Data Handling
+
+The platform processes only aggregated, population-level statistics. Individual patient records are never accessed or exposed. The ELT pipeline uses `select_essential()` to retain only columns necessary for metric calculations, filters out invalid records, and removes non-actionable data. The primary key (`NU_NOTIFIC`) is used solely for deduplication and is never exposed in responses. Data is stored in Azure with authentication via `DefaultAzureCredential`, and credentials are managed through environment variables. IBGE codes are used internally but never displayed to users (only city/state names are shown).
+
+### Code Quality
+
+The codebase follows clean code principles with modular organization, single-responsibility functions, comprehensive type hints (`Annotated`, `TypedDict`), and docstrings for all public functions. Configuration is centralized in `common.config`, validation logic is reusable, and error handling includes fallbacks. The data transformation pipeline is structured as a 9-step process with explicit logging of each stage, schema analysis, and quality reporting. Code is organized by domain (agent, tools, elt, metrics, charts, report, retrieval, ui) with clear module boundaries and README documentation for each component.
 
 ---
 
