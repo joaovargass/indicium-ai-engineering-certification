@@ -159,7 +159,7 @@ NEWS_API_MAX_RESULTS = 20
 # =============================================================================
 # Text Truncation Limits
 # =============================================================================
-EXPLANATION_MAX_LENGTH = 100
+EXPLANATION_MAX_LENGTH = 300
 NEWS_SUMMARY_MAX_LENGTH = 200
 ARTICLE_PREVIEW_LENGTH = 150
 REPORT_SUMMARY_PARAGRAPH_LENGTH = 150

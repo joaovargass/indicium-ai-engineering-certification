@@ -73,7 +73,11 @@ Resumo Executivo:"""
     try:
         llm = _get_llm()
         response = llm.invoke(prompt)
-        return response.content.strip()
+        content = response.content.strip()
+        # Remove "Resumo Executivo:" prefix if LLM added it
+        if content.startswith("Resumo Executivo:"):
+            content = content.replace("Resumo Executivo:", "", 1).strip()
+        return content
     except Exception:
         return f"Análise consolidada dos dados SRAG para {location}. Os dados indicam uma situação que requer monitoramento contínuo."
 

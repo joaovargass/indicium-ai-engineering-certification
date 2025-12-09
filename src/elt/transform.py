@@ -70,6 +70,8 @@ def convert_types(df: pd.DataFrame) -> pd.DataFrame:
     """Convert date columns to datetime."""
     df = df.copy()
     date_formats = ["%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"]
+    today = pd.Timestamp.now().normalize()
+    max_valid_year = today.year + 1  # Allow up to 1 year in future for data collection lag
 
     for col_name in DATE_COLUMNS:
         if col_name not in df.columns:
@@ -91,6 +93,14 @@ def convert_types(df: pd.DataFrame) -> pd.DataFrame:
 
         if converted is None or converted.isna().all():
             converted = pd.to_datetime(col_data, errors="coerce")
+
+        # Filter out dates that are clearly wrong (way in the future)
+        # This catches cases where pandas misinterprets dates (e.g., "32" as 2032)
+        if converted is not None:
+            invalid_future = converted > pd.Timestamp(f"{max_valid_year}-12-31")
+            if invalid_future.any():
+                # Set clearly invalid future dates to NaT (Not a Time)
+                converted.loc[invalid_future] = pd.NaT
 
         df[col_name] = converted
 

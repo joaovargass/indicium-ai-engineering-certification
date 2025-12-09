@@ -15,6 +15,7 @@ Response format expected:
 
 """
 
+import json
 from typing import Any
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -140,6 +141,24 @@ def _extract_tool_outputs(
             report_path = path
         if content:
             report_content = content
+        
+        # Extract charts from generate_chat_report output
+        parsed = parse_tool_content(msg.content)
+        if parsed and "daily_chart_json" in parsed:
+            daily_json = parsed.get("daily_chart_json")
+            monthly_json = parsed.get("monthly_chart_json")
+            if daily_json:
+                try:
+                    daily_dict = json.loads(daily_json) if isinstance(daily_json, str) else daily_json
+                    chart_figures.append(Figure(daily_dict))
+                except Exception:
+                    pass
+            if monthly_json:
+                try:
+                    monthly_dict = json.loads(monthly_json) if isinstance(monthly_json, str) else monthly_json
+                    chart_figures.append(Figure(monthly_dict))
+                except Exception:
+                    pass
 
     return chart_figures, chart_metadata, report_path, report_content
 

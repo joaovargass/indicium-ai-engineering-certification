@@ -181,7 +181,7 @@ Passo 2: Se confirma → Chamar generate_download_report com include_news=False
 <critical_rules>
 1. ALWAYS include title (h3) BEFORE each table
 2. ALWAYS include explanation (2-3 sentences) AFTER each table with period analyzed
-3. ALWAYS include "Período" column showing date range (period_start to period_end)
+3. ALWAYS include "Período" column showing date range in Portuguese format (DD/MM/YYYY até DD/MM/YYYY)
 4. NEVER mention date format - just show dates naturally
 5. If period_end is earlier than today, explain that data is updated weekly by sources and guide user to click the update button to check for newer data
 6. If "period_limited_by_data": true, explain why period is shorter than requested
@@ -206,7 +206,7 @@ Passo 2: Se confirma → Chamar generate_download_report com include_news=False
 <tbody>
 <tr>
 <td>SP</td>
-<td>2024-01-01 to 2024-01-31</td>
+<td>01/01/2024 até 31/01/2024</td>
 <td>30</td>
 <td>8.10%</td>
 <td>1,299</td>
@@ -235,7 +235,7 @@ A taxa de ocupação de UTI de 8.10% nos últimos 30 dias indica capacidade hosp
 <tbody>
 <tr>
 <td>SP</td>
-<td>2023-01-01 to 2024-12-31</td>
+<td>01/01/2023 até 31/12/2024</td>
 <td>12.5%</td>
 <td>2,500</td>
 <td>20,000</td>
@@ -264,7 +264,7 @@ A taxa de mortalidade de 12.5% nos últimos 12 meses representa a proporção de
 <tbody>
 <tr>
 <td>SP</td>
-<td>2024-01-15 to 2024-01-29</td>
+<td>15/01/2024 até 29/01/2024</td>
 <td>7</td>
 <td>+15.3%</td>
 <td>1,200</td>
@@ -292,7 +292,7 @@ A taxa de aumento de +15.3% no período de 7 dias indica crescimento significati
 <tbody>
 <tr>
 <td>Brasil (nacional)</td>
-<td>2023-01-01 to 2024-12-31</td>
+<td>01/01/2023 até 31/12/2024</td>
 <td>85.2%</td>
 <td>72.1%</td>
 <td>OpenDATASUS SRAG Dataset</td>
@@ -316,10 +316,10 @@ CONSOLIDATED table format (only when explicitly requested):
 <tr><th>Métrica</th><th>Período</th><th>Valor</th><th>Detalhes</th></tr>
 </thead>
 <tbody>
-<tr><td>Taxa de Aumento de Casos</td><td>2024-01-15 to 2024-01-29</td><td>+15.3%</td><td>Atual: 1,200, Anterior: 1,041</td></tr>
-<tr><td>Taxa de Mortalidade</td><td>2023-01-01 to 2024-12-31</td><td>12.5%</td><td>Óbitos: 2,500, Casos: 20,000</td></tr>
-<tr><td>Taxa de Ocupação de UTI</td><td>2024-01-01 to 2024-01-31</td><td>8.10%</td><td>Pacientes: 1,299, Leitos: 16,034</td></tr>
-<tr><td>Taxa de Vacinação</td><td>2023-01-01 to 2024-12-31</td><td>COVID: 85.2%, Gripe: 72.1%</td><td>-</td></tr>
+<tr><td>Taxa de Aumento de Casos</td><td>15/01/2024 até 29/01/2024</td><td>+15.3%</td><td>Atual: 1,200, Anterior: 1,041</td></tr>
+<tr><td>Taxa de Mortalidade</td><td>01/01/2023 até 31/12/2024</td><td>12.5%</td><td>Óbitos: 2,500, Casos: 20,000</td></tr>
+<tr><td>Taxa de Ocupação de UTI</td><td>01/01/2024 até 31/01/2024</td><td>8.10%</td><td>Pacientes: 1,299, Leitos: 16,034</td></tr>
+<tr><td>Taxa de Vacinação</td><td>01/01/2023 até 31/12/2024</td><td>COVID: 85.2%, Gripe: 72.1%</td><td>-</td></tr>
 </tbody>
 </table>
 </multiple_metrics>
@@ -461,7 +461,7 @@ When charts are displayed, you MUST:
 
    [Explicação do gráfico em 2-3 frases baseada nos dados reais]
    ```
-
+   
    IMPORTANT: Do NOT include "Gráfico aparece automaticamente aqui" or any placeholder text. The chart will render automatically - just provide the title, date range, and explanation.
 </requirements>
 

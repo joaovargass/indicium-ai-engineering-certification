@@ -291,7 +291,11 @@ def _calculate_icu_period(
     if len(icu_patients) > 0 and "DT_ENTUTI" in icu_patients.columns:
         data_max_date = icu_patients["DT_ENTUTI"].max().normalize()
         data_min_date = icu_patients["DT_ENTUTI"].min().normalize()
-        period_end = data_max_date
+        
+        # Cap period_end to today - never use future dates
+        today = pd.Timestamp.now().normalize()
+        period_end = min(data_max_date, today)
+        
         desired_period_start = period_end - timedelta(days=lookback_days - 1)
         period_start = max(desired_period_start, data_min_date)
         period_limited = period_start > desired_period_start
@@ -304,17 +308,18 @@ def _calculate_icu_period(
 def _filter_current_icu_patients(
     icu_patients: pd.DataFrame, period_start: pd.Timestamp, period_end: pd.Timestamp
 ) -> pd.DataFrame:
-    """Filter patients currently in ICU within the period."""
+    """Filter patients currently in ICU at period_end."""
     if "DT_SAIDUTI" in icu_patients.columns:
         return icu_patients[
             (
                 (icu_patients["DT_SAIDUTI"].isna())
                 | (icu_patients["DT_SAIDUTI"] > period_end)
             )
-            & (icu_patients["DT_ENTUTI"] >= period_start)
+            & (icu_patients["DT_ENTUTI"] <= period_end)
         ]
 
-    return icu_patients[icu_patients["DT_ENTUTI"] >= period_start]
+    # If no exit date column, count all who entered by period_end
+    return icu_patients[icu_patients["DT_ENTUTI"] <= period_end]
 
 
 def _build_icu_metadata(
