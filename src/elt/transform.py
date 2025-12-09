@@ -115,10 +115,19 @@ def _impute_symptom_dates(df: pd.DataFrame) -> pd.DataFrame:
         df["DT_SIN_PRI"] = df["DT_SIN_PRI"].fillna(df["DT_NOTIFIC"])
 
     if "DT_SIN_PRI" in df.columns:
-        today = pd.Timestamp.now().normalize()
-        future = df["DT_SIN_PRI"] > today
-        if future.any():
-            df.loc[future, "DT_SIN_PRI"] = today
+        valid_dates = df["DT_SIN_PRI"].dropna()
+        if len(valid_dates) > 0:
+            # Use maximum date from dataset to cap future dates
+            data_max_date = valid_dates.max().normalize()
+            future = df["DT_SIN_PRI"] > data_max_date
+            if future.any():
+                df.loc[future, "DT_SIN_PRI"] = data_max_date
+        else:
+            # Fallback: if no valid dates exist, use current date for data cleaning
+            today = pd.Timestamp.now().normalize()
+            future = df["DT_SIN_PRI"] > today
+            if future.any():
+                df.loc[future, "DT_SIN_PRI"] = today
 
     return df
 

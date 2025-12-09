@@ -1,6 +1,6 @@
 """Metrics calculation module for SRAG data analysis."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 import pandas as pd
@@ -202,8 +202,7 @@ def calculate_mortality_rate(
 
             # Filter by lookback_months if specified
             if lookback_months is not None:
-                current_date = datetime.now().date()
-                period_end_date = min(data_max_date.date(), current_date)
+                period_end_date = data_max_date.date()
                 period_start_date = period_end_date - timedelta(
                     days=lookback_months * 30
                 )
@@ -289,35 +288,28 @@ def _calculate_icu_period(
     icu_patients: pd.DataFrame, lookback_days: int
 ) -> tuple[pd.Timestamp, pd.Timestamp, bool]:
     """Calculate period dates for ICU occupancy calculation."""
-    current_date = pd.Timestamp.now().normalize()
-
     if len(icu_patients) > 0 and "DT_ENTUTI" in icu_patients.columns:
         data_max_date = icu_patients["DT_ENTUTI"].max().normalize()
         data_min_date = icu_patients["DT_ENTUTI"].min().normalize()
-        period_end = min(data_max_date, current_date)
+        period_end = data_max_date
         desired_period_start = period_end - timedelta(days=lookback_days - 1)
         period_start = max(desired_period_start, data_min_date)
-        period_limited = (
-            period_end < current_date or period_start > desired_period_start
-        )
+        period_limited = period_start > desired_period_start
         return period_start, period_end, period_limited
 
-    period_end = current_date
-    period_start = current_date - timedelta(days=lookback_days - 1)
-    return period_start, period_end, False
+    # Fallback: if no data, return minimum timestamps
+    return pd.Timestamp.min, pd.Timestamp.min, False
 
 
 def _filter_current_icu_patients(
-    icu_patients: pd.DataFrame, period_start: pd.Timestamp
+    icu_patients: pd.DataFrame, period_start: pd.Timestamp, period_end: pd.Timestamp
 ) -> pd.DataFrame:
     """Filter patients currently in ICU within the period."""
-    current_date = pd.Timestamp.now().normalize()
-
     if "DT_SAIDUTI" in icu_patients.columns:
         return icu_patients[
             (
                 (icu_patients["DT_SAIDUTI"].isna())
-                | (icu_patients["DT_SAIDUTI"] > current_date)
+                | (icu_patients["DT_SAIDUTI"] > period_end)
             )
             & (icu_patients["DT_ENTUTI"] >= period_start)
         ]
@@ -343,13 +335,11 @@ def _build_icu_metadata(
         }
 
     if period_limited:
-        current_date = pd.Timestamp.now().normalize()
         actual_days = (period_end - period_start).days + 1
         metadata["period_limited_by_data"] = True
         metadata["requested_lookback_days"] = lookback_days
         metadata["actual_period_days"] = actual_days
         metadata["data_max_date"] = period_end.isoformat()
-        metadata["current_date"] = current_date.isoformat()
 
     return metadata
 
@@ -411,7 +401,9 @@ def calculate_icu_occupancy_rate(
     period_start, period_end, period_limited = _calculate_icu_period(
         icu_patients, lookback_days
     )
-    currently_in_icu = _filter_current_icu_patients(icu_patients, period_start)
+    currently_in_icu = _filter_current_icu_patients(
+        icu_patients, period_start, period_end
+    )
     patients_count = len(currently_in_icu)
 
     data_source = None
@@ -503,8 +495,7 @@ def _prepare_vaccination_data(
     data_min_date = df[date_col].min().normalize()
 
     if lookback_months is not None:
-        current_date = datetime.now().date()
-        period_end_date = min(data_max_date.date(), current_date)
+        period_end_date = data_max_date.date()
         period_start_date = period_end_date - timedelta(days=lookback_months * 30)
         period_start_date = max(period_start_date, data_min_date.date())
 

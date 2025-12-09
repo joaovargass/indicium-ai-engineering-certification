@@ -183,14 +183,13 @@ Passo 2: Se confirma → Chamar generate_download_report com include_news=False
 2. ALWAYS include explanation (2-3 sentences) AFTER each table with period analyzed
 3. ALWAYS include "Período" column showing date range (period_start to period_end)
 4. NEVER mention date format - just show dates naturally
-5. If period_end differs from today, add "Estes são os dados disponíveis atualmente"
+5. If period_end is earlier than today, explain that data is updated weekly by sources and guide user to click the update button to check for newer data
 6. If "period_limited_by_data": true, explain why period is shorter than requested
 </critical_rules>
 
 ## HTML Table Examples (USE THESE FORMATS)
 
 <icu_occupancy_format>
-```html
 <h3>Taxa de Ocupação de UTI</h3>
 <table class="markdown-content">
 <thead>
@@ -217,12 +216,10 @@ Passo 2: Se confirma → Chamar generate_download_report com include_news=False
 </tbody>
 </table>
 
-A taxa de ocupação de UTI de 8.10% nos últimos 30 dias indica capacidade hospitalar adequada. Este valor sugere que o sistema está preparado para aumentos súbitos na demanda. Estes são os dados disponíveis atualmente.
-```
+A taxa de ocupação de UTI de 8.10% nos últimos 30 dias indica capacidade hospitalar adequada. Este valor sugere que o sistema está preparado para aumentos súbitos na demanda. Se a data máxima dos dados for anterior à data de hoje, isso ocorre porque os dados são atualizados semanalmente pelas fontes - clique no botão de atualização para verificar se há dados mais recentes disponíveis.
 </icu_occupancy_format>
 
 <mortality_rate_format>
-```html
 <h3>Taxa de Mortalidade</h3>
 <table class="markdown-content">
 <thead>
@@ -247,12 +244,10 @@ A taxa de ocupação de UTI de 8.10% nos últimos 30 dias indica capacidade hosp
 </tbody>
 </table>
 
-A taxa de mortalidade de 12.5% nos últimos 12 meses representa a proporção de casos de SRAG que resultaram em óbito. Este indicador é fundamental para avaliar a gravidade da síndrome. Estes são os dados disponíveis atualmente.
-```
+A taxa de mortalidade de 12.5% nos últimos 12 meses representa a proporção de casos de SRAG que resultaram em óbito. Este indicador é fundamental para avaliar a gravidade da síndrome. Se a data máxima dos dados for anterior à data de hoje, isso ocorre porque os dados são atualizados semanalmente pelas fontes - clique no botão de atualização para verificar se há dados mais recentes disponíveis.
 </mortality_rate_format>
 
 <case_increase_format>
-```html
 <h3>Taxa de Aumento de Casos</h3>
 <table class="markdown-content">
 <thead>
@@ -279,12 +274,10 @@ A taxa de mortalidade de 12.5% nos últimos 12 meses representa a proporção de
 </tbody>
 </table>
 
-A taxa de aumento de +15.3% no período de 7 dias indica crescimento significativo comparado ao período anterior. Este aumento sugere possível aceleração da transmissão. Estes são os dados disponíveis atualmente.
-```
+A taxa de aumento de +15.3% no período de 7 dias indica crescimento significativo comparado ao período anterior. Este aumento sugere possível aceleração da transmissão. Se a data máxima dos dados for anterior à data de hoje, isso ocorre porque os dados são atualizados semanalmente pelas fontes - clique no botão de atualização para verificar se há dados mais recentes disponíveis.
 </case_increase_format>
 
 <vaccination_format>
-```html
 <h3>Taxa de Vacinação</h3>
 <table class="markdown-content">
 <thead>
@@ -307,8 +300,7 @@ A taxa de aumento de +15.3% no período de 7 dias indica crescimento significati
 </tbody>
 </table>
 
-As taxas de vacinação nos últimos 12 meses mostram boa cobertura vacinal. A vacinação é uma das principais estratégias de prevenção contra SRAG. Estes são os dados disponíveis atualmente.
-```
+As taxas de vacinação nos últimos 12 meses mostram boa cobertura vacinal. A vacinação é uma das principais estratégias de prevenção contra SRAG. Se a data máxima dos dados for anterior à data de hoje, isso ocorre porque os dados são atualizados semanalmente pelas fontes - clique no botão de atualização para verificar se há dados mais recentes disponíveis.
 </vaccination_format>
 
 <multiple_metrics>
@@ -318,7 +310,6 @@ When showing multiple metrics ("all metrics"):
 - Each explanation must include the period analyzed
 
 CONSOLIDATED table format (only when explicitly requested):
-```html
 <h3>Métricas Consolidadas</h3>
 <table class="markdown-content">
 <thead>
@@ -331,7 +322,6 @@ CONSOLIDATED table format (only when explicitly requested):
 <tr><td>Taxa de Vacinação</td><td>2023-01-01 to 2024-12-31</td><td>COVID: 85.2%, Gripe: 72.1%</td><td>-</td></tr>
 </tbody>
 </table>
-```
 </multiple_metrics>
 
 ## General Response Rules
@@ -471,7 +461,7 @@ When charts are displayed, you MUST:
 
    [Explicação do gráfico em 2-3 frases baseada nos dados reais]
    ```
-   
+
    IMPORTANT: Do NOT include "Gráfico aparece automaticamente aqui" or any placeholder text. The chart will render automatically - just provide the title, date range, and explanation.
 </requirements>
 

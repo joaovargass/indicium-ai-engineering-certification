@@ -7,7 +7,7 @@ A **Dash web application** with an **AI chat interface** for analyzing Brazilian
 - **AI Chat Interface**: Natural language queries about SRAG data powered by LangGraph and OpenAI GPT models
 - **Metrics Dashboard**: Calculate mortality rates, ICU occupancy, vaccination coverage, and case trends
 - **Interactive Charts**: Daily and monthly case visualizations with customizable date ranges using Plotly
-- **Report Generation**: Automated PDF/ZIP reports with data analysis, charts, and news integration
+- **Report Generation**: Automated Markdown/ZIP reports with data analysis, charts, and news integration
 - **ELT Pipeline**: Incremental data extraction from OpenDataSUS with Azure Data Lake Gen2 storage and Synapse Analytics
 - **Modular Architecture**: Well-organized codebase with clear separation of concerns (UI, agent, tools, ELT, metrics)
 
@@ -95,8 +95,8 @@ sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
    
    Edit `.env` and add your keys:
    ```env
-   OPENAI_API_KEY=your-openai-api-key
-   TAVILY_API_KEY=your-tavily-api-key  # Optional, for news search
+   OPENAI_API_KEY=your-openai-api-key # https://platform.openai.com/account/api-keys
+   TAVILY_API_KEY=your-tavily-api-key # https://tavily.com/api
    ```
 
 ---
@@ -233,7 +233,6 @@ Ask questions in Portuguese about SRAG data:
 │   │   ├── response_parsing.py # Agent response parsing
 │   │   ├── chart_render.py     # Chart rendering for UI
 │   │   ├── chart_data.py       # Chart data preparation
-│   │   ├── chart_formatting.py # Chart formatting utilities
 │   │   ├── tool_parsing.py     # Tool output parsing
 │   │   ├── download.py         # Report download handling
 │   │   ├── state.py            # UI state management

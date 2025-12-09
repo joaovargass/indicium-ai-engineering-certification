@@ -15,7 +15,6 @@ Response format expected:
 
 """
 
-import re
 from typing import Any
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -24,76 +23,6 @@ from plotly.graph_objects import Figure
 from ui.chart_render import render_tool_chart
 from ui.constants import CHART_TOOL_NAMES
 from ui.tool_parsing import extract_report_info, parse_tool_content
-
-
-def _remove_code_blocks(content: str) -> str:
-    """
-    Remove markdown code blocks from content to allow HTML rendering.
-
-    Removes patterns like ```html ... ``` or ``` ... ``` so that HTML
-    tables can be rendered instead of displayed as code.
-
-    Args:
-        content: Text content that may contain code blocks
-
-    Returns:
-        Content with code blocks removed
-
-    """
-    # Remove code blocks with language specifier (e.g., ```html ... ```)
-    content = re.sub(r"```\w*\n(.*?)```", r"\1", content, flags=re.DOTALL)
-    # Remove any remaining code blocks without language
-    content = re.sub(r"```\n(.*?)```", r"\1", content, flags=re.DOTALL)
-    return content.strip()
-
-
-def _clean_technical_metadata(content: str) -> str:
-    """
-    Remove technical metadata patterns that may appear in agent responses.
-
-    Filters out patterns like:
-    - [CHART_DATA]...[/CHART_DATA] blocks
-    - Technical metadata lines (Chart Type:, Start Date: year=, etc.)
-    - Structured data patterns that shouldn't be displayed
-    - Markdown links in date ranges
-
-    Args:
-        content: Text content that may contain technical metadata
-
-    Returns:
-        Content with technical metadata removed
-
-    """
-    # Remove [CHART_DATA]...[/CHART_DATA] blocks
-    content = re.sub(r"\[CHART_DATA\].*?\[/CHART_DATA\]", "", content, flags=re.DOTALL | re.IGNORECASE)
-
-    # Remove markdown links from date ranges (e.g., [Intervalo de datas: ...](url))
-    content = re.sub(r"\[Intervalo de datas:[^\]]+\]\([^\)]+\)", "", content, flags=re.IGNORECASE)
-    # Remove standalone "Intervalo de datas:" prefix if it appears as a link
-    content = re.sub(r"\[Intervalo de datas:\s*([^\]]+)\]", r"\1", content, flags=re.IGNORECASE)
-    # Remove placeholder text about chart appearing
-    content = re.sub(r"Gráfico aparece automaticamente aqui", "", content, flags=re.IGNORECASE)
-    content = re.sub(r"Chart appears automatically", "", content, flags=re.IGNORECASE)
-
-    # Remove standalone technical metadata lines
-    technical_patterns = [
-        r"^Chart Type:\s*.*$",
-        r"^Location:\s*.*$",
-        r"^Start Date:\s*year=.*$",
-        r"^End Date:\s*year=.*$",
-        r"^Total Cases:\s*\d+$",
-        r"^Average (Daily|Monthly) Cases:\s*[\d.]+$",
-        r"^Peak (Daily|Monthly) Cases:\s*\d+.*$",
-        r"^Trend:\s*.*\(\d+\.\d+% change\)$",
-    ]
-
-    for pattern in technical_patterns:
-        content = re.sub(pattern, "", content, flags=re.MULTILINE | re.IGNORECASE)
-
-    # Clean up multiple consecutive newlines
-    content = re.sub(r"\n{3,}", "\n\n", content)
-
-    return content.strip()
 
 
 def parse_agent_response(
@@ -132,12 +61,6 @@ def parse_agent_response(
     # Use report content if available
     if report_content:
         text_content = report_content
-
-    # Remove code blocks so HTML tables render properly
-    text_content = _remove_code_blocks(text_content)
-
-    # Remove any technical metadata blocks that may have leaked into response
-    text_content = _clean_technical_metadata(text_content)
 
     return text_content, chart_figures, report_path, is_explicit_generation
 

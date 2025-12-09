@@ -23,6 +23,7 @@ from report.templater import (
     save_report_zip,
     validate_report_request,
 )
+from tools.chart_tools import get_daily_chart_json, get_monthly_chart_json
 from tools.location_utils import determine_location_filter, get_location_description
 from tools.metric_tools import (
     get_case_increase_rate,

@@ -429,9 +429,9 @@ def _clear_conversation(
                 new_store,
                 render_messages(new_store["messages"]),
                 (scroll_trigger or 0) + 1,
-                None,   # Clear pending request
+                None,  # Clear pending request
                 False,  # Stop loading
-                True,   # Disable loading interval
+                True,  # Disable loading interval
                 False,  # Unlock send button
                 False,  # Unlock input
             )

@@ -112,24 +112,30 @@ def _build_metric_context(
     return context
 
 
-def _check_data_outdated(period_end: str | None) -> str:
-    """Check if data is outdated and return note if needed."""
+def _check_data_outdated(period_end: str | None) -> tuple[str, str | None, str | None]:
+    """Check if data is outdated and return note with dates."""
     if not period_end:
-        return ""
+        return "", None, None
 
     from datetime import datetime
 
     today = datetime.now().date()
+    today_str = today.strftime("%Y-%m-%d")
     try:
         period_end_date = datetime.fromisoformat(
             period_end.replace("Z", "+00:00")
         ).date()
-        if period_end_date < today:
-            return "\nIMPORTANTE: A data máxima dos dados é diferente da data de hoje. Você DEVE mencionar 'Estes são os dados disponíveis atualmente' ou similar na explicação."
-    except Exception:
-        pass
+        period_end_str = period_end_date.strftime("%Y-%m-%d")
 
-    return ""
+        if period_end_date < today:
+            note = f"\nIMPORTANTE: A data máxima dos dados ({period_end_str}) é anterior à data de hoje ({today_str}). Isso ocorre porque os dados são atualizados semanalmente pelas fontes. Você DEVE mencionar isso na explicação e orientar o usuário a clicar no botão de atualização para verificar se há dados mais recentes disponíveis."
+            return note, today_str, period_end_str
+        else:
+            return "", today_str, period_end_str
+    except Exception:
+        return "", today_str, None
+
+    return "", None, None
 
 
 def generate_metric_explanation(
@@ -169,19 +175,34 @@ def generate_metric_explanation(
     if period_start and period_end:
         period_info = f"\nPeríodo analisado: {period_start} até {period_end}"
 
-    data_outdated_note = _check_data_outdated(period_end)
+    data_outdated_note, today_date, period_end_date = _check_data_outdated(period_end)
+
+    date_info = ""
+    if today_date and period_end_date:
+        from datetime import datetime
+
+        date_info = (
+            f"\nData de hoje: {today_date}\nData máxima dos dados: {period_end_date}"
+        )
+        try:
+            today_dt = datetime.strptime(today_date, "%Y-%m-%d").date()
+            period_end_dt = datetime.strptime(period_end_date, "%Y-%m-%d").date()
+            if period_end_dt < today_dt:
+                date_info += f"\nA data máxima dos dados ({period_end_date}) é anterior à data de hoje ({today_date})."
+        except Exception:
+            pass
 
     prompt = f"""Você é um analista de dados de saúde.
 
 Com base nos dados abaixo, gere uma explicação contextualizada curta (2-3 frases) em português que explique o que este valor significa no cenário atual.
 
-{context}{period_info}{data_outdated_note}
+{context}{period_info}{date_info}{data_outdated_note}
 
 Instruções:
 - Explique o que o valor significa (alto, baixo, preocupante, positivo, etc.)
 - SEMPRE mencione o período analisado na explicação (e.g., "nos últimos 12 meses", "no período de 7 dias", "nos últimos 30 dias")
 - NUNCA mencione o formato de data (YYYY-MM-DD) explicitamente - apenas use datas naturalmente
-- Se a data máxima dos dados for diferente da data de hoje, SEMPRE adicione uma nota mencionando "Estes são os dados disponíveis atualmente" ou similar
+- Se a data máxima dos dados for anterior à data de hoje, SEMPRE explique que isso ocorre porque os dados são atualizados semanalmente pelas fontes e oriente o usuário a clicar no botão de atualização para verificar se há dados mais recentes disponíveis
 - Conecte às notícias se relevante
 - Seja claro e profissional
 - Máximo 2-3 frases

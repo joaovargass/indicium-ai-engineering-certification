@@ -80,6 +80,8 @@ DADOS PARA {location}:
 
 def _build_metrics_context(metrics: dict[str, Any]) -> str:
     """Build metrics context for the LLM prompt."""
+    from datetime import datetime
+
     case_data = metrics.get("case_increase", {})
     case_rate = case_data.get("rate")
     case_current = case_data.get("current_period_cases", 0)
@@ -107,6 +109,35 @@ def _build_metrics_context(metrics: dict[str, Any]) -> str:
     vax_period_start = vax_data.get("period_start")
     vax_period_end = vax_data.get("period_end")
 
+    # Get today's date and find the maximum period_end from all metrics
+    today = datetime.now().date()
+    today_str = today.strftime("%Y-%m-%d")
+
+    period_ends = [
+        case_period_end,
+        mortality_period_end,
+        icu_period_end,
+        vax_period_end,
+    ]
+
+    max_period_end = None
+    max_period_end_date = None
+    for pe in period_ends:
+        if pe:
+            try:
+                pe_date = datetime.fromisoformat(pe.replace("Z", "+00:00")).date()
+                if max_period_end_date is None or pe_date > max_period_end_date:
+                    max_period_end_date = pe_date
+                    max_period_end = pe_date.strftime("%Y-%m-%d")
+            except Exception:
+                continue
+
+    date_context = ""
+    if max_period_end and max_period_end_date:
+        date_context = f"\n\nINFORMAÇÕES SOBRE DATAS:\n- Data de hoje: {today_str}\n- Data máxima dos dados: {max_period_end}"
+        if max_period_end_date < today:
+            date_context += f"\n- A data máxima dos dados ({max_period_end}) é anterior à data de hoje ({today_str}). Isso ocorre porque os dados são atualizados semanalmente pelas fontes."
+
     return f"""
 Métricas Confirmadas:
 - Taxa de aumento de casos: {case_rate}% (período atual: {case_current} casos, período anterior: {case_previous} casos)
@@ -118,6 +149,7 @@ Métricas Confirmadas:
 - Taxa de vacinação COVID-19: {covid_vax}%
 - Taxa de vacinação Gripe: {flu_vax}%
   Período: {vax_period_start} até {vax_period_end}
+{date_context}
 """
 
 
@@ -214,7 +246,7 @@ def _build_integration_rules(
         rules += """   - Interprete os dados das métricas e explique o que significam
    - SEMPRE mencione o período analisado nas explicações (e.g., "nos últimos 12 meses", "no período de 7 dias", "nos últimos 30 dias")
    - NUNCA mencione o formato de data (YYYY-MM-DD) explicitamente - apenas use datas naturalmente
-   - Se a data máxima dos dados (period_end) for diferente da data de hoje, SEMPRE adicione uma nota mencionando "Estes são os dados disponíveis atualmente" ou similar
+   - Se a data máxima dos dados (period_end) for anterior à data de hoje, SEMPRE explique que isso ocorre porque os dados são atualizados semanalmente pelas fontes e oriente o usuário a clicar no botão de atualização para verificar se há dados mais recentes disponíveis
 """
 
     if include_charts and chart_info:
