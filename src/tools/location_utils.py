@@ -1,12 +1,13 @@
 """Location filter utilities."""
 
 import json
-from pathlib import Path
 
 import requests
 
+from common.config import CITY_MAPPING_PATH, LOCATION_REQUEST_TIMEOUT_SECONDS
 
-def get_city_name_from_code(city_code: str) -> str | None:
+
+def resolve_city_name(city_code: str) -> str | None:
     """
     Get city name from 6-digit IBGE code using cached API data.
 
@@ -15,12 +16,11 @@ def get_city_name_from_code(city_code: str) -> str | None:
 
     Returns:
         City name if found, None otherwise
-    """
-    cache_file = Path(__file__).resolve().parent.parent.parent / "data" / "cleaned" / "city_mapping.json"
 
-    if cache_file.exists():
+    """
+    if CITY_MAPPING_PATH.exists():
         try:
-            with open(cache_file, encoding="utf-8") as f:
+            with open(CITY_MAPPING_PATH, encoding="utf-8") as f:
                 mapping = json.load(f)
             return mapping.get(str(city_code))
         except Exception:
@@ -29,7 +29,7 @@ def get_city_name_from_code(city_code: str) -> str | None:
     try:
         response = requests.get(
             "https://servicodados.ibge.gov.br/api/v1/localidades/municipios",
-            timeout=30,
+            timeout=LOCATION_REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         data = response.json()
@@ -40,8 +40,8 @@ def get_city_name_from_code(city_code: str) -> str | None:
             if code_6digit not in mapping:
                 mapping[code_6digit] = city["nome"]
 
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(cache_file, "w", encoding="utf-8") as f:
+        CITY_MAPPING_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(CITY_MAPPING_PATH, "w", encoding="utf-8") as f:
             json.dump(mapping, f, ensure_ascii=False, indent=2)
 
         return mapping.get(str(city_code))
@@ -65,7 +65,7 @@ def get_location_description(
 ) -> str:
     """Return human-readable location description."""
     if city_code:
-        city_name = get_city_name_from_code(city_code)
+        city_name = resolve_city_name(city_code)
         if city_name:
             return city_name
         return f"Cidade código {city_code}"

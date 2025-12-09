@@ -1,0 +1,42 @@
+---
+config:
+  layout: elk
+  maxWidth: 1200
+---
+flowchart TB
+    Tools[Tools Request Data] -->|load_srag_data| Loader[Data Loader]
+    
+    Loader -->|Check| CacheExists{Cache File<br/>Exists?}
+    CacheExists -->|Yes| ReadCache[Read Parquet<br/>data/cleaned/dash_cache.parquet]
+    CacheExists -->|No| ReadDW[Read from DW<br/>Azure Synapse<br/>dbo.srag_cleaned]
+    
+    ReadCache -->|Return| DataFrame[DataFrame<br/>Returned to Tools]
+    ReadDW -->|Return| DataFrame
+    
+    ReadDW -->|If Cache Missing| UpdateCache[Update Cache<br/>Save Parquet File]
+    
+    subgraph ELT_FLOW["ELT Pipeline Flow"]
+        direction TB
+        ELT[ELT Pipeline] -->|Extract| OpenDataSUS[OpenDataSUS<br/>Download Files]
+        OpenDataSUS -->|Upload| DataLake[Azure Data Lake<br/>raw/deltas/]
+        DataLake -->|Transform| CleanData[Clean Data<br/>9 Steps]
+        CleanData -->|Load| Synapse[Azure Synapse<br/>COPY INTO]
+        Synapse -->|Update| CacheFile[Update Cache<br/>dash_cache.parquet]
+    end
+    
+    DataFrame -->|Used By| Tools
+    
+    classDef toolsStyle fill:#9333ea,stroke:#7e22ce,stroke-width:3px,color:#fff
+    classDef loaderStyle fill:#059669,stroke:#047857,stroke-width:3px,color:#fff
+    classDef cacheStyle fill:#ca8a04,stroke:#a16207,stroke-width:2px,color:#fff
+    classDef dwStyle fill:#1e40af,stroke:#1e3a8a,stroke-width:2px,color:#fff
+    classDef eltStyle fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
+    classDef dataStyle fill:#64748b,stroke:#475569,stroke-width:2px,color:#fff
+    
+    class Tools toolsStyle
+    class Loader loaderStyle
+    class CacheExists,ReadCache,UpdateCache,CacheFile cacheStyle
+    class ReadDW,Synapse dwStyle
+    class ELT,OpenDataSUS,DataLake,CleanData eltStyle
+    class DataFrame dataStyle
+

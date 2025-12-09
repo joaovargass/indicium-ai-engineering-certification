@@ -3,46 +3,18 @@
 import os
 from typing import Any
 
-from dotenv import load_dotenv
 from tavily import TavilyClient
 
-from common.config import BRAZILIAN_STATES, HEALTH_KEYWORDS_EN, HEALTH_KEYWORDS_PT
-
-load_dotenv()
+from common.config import (
+    BRAZILIAN_STATES,
+    HEALTH_KEYWORDS_EN,
+    HEALTH_KEYWORDS_PT,
+    MAX_NEWS_ARTICLES,
+    NEWS_API_MAX_RESULTS,
+    STATE_NAME_PATTERNS,
+)
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-if not TAVILY_API_KEY:
-    raise ValueError("TAVILY_API_KEY not found. Set it in .env file.")
-
-STATE_NAME_PATTERNS = [
-    "são paulo",
-    "rio de janeiro",
-    "rio grande do sul",
-    "minas gerais",
-    "santa catarina",
-    "paraná",
-    "bahia",
-    "goiás",
-    "ceará",
-    "pernambuco",
-    "pará",
-    "amazonas",
-    "espírito santo",
-    "mato grosso",
-    "rio grande do norte",
-    "alagoas",
-    "piauí",
-    "maranhão",
-    "paraíba",
-    "distrito federal",
-    "rondônia",
-    "acre",
-    "amapá",
-    "roraima",
-    "sergipe",
-    "tocantins",
-    "mato grosso do sul",
-]
 
 
 def _enhance_query(query: str) -> str:
@@ -64,22 +36,28 @@ def _enhance_query(query: str) -> str:
     return enhanced
 
 
-def search_srag_news(query: str, max_results: int = 5) -> list[dict[str, Any]]:
+def search_srag_news(
+    query: str, max_results: int = MAX_NEWS_ARTICLES
+) -> list[dict[str, Any]]:
     """
     Search for SRAG/health news in Brazil using Tavily API.
 
     Args:
         query: Search topic.
-        max_results: Max results (1-20, default: 5).
+        max_results: Max results (1-NEWS_API_MAX_RESULTS, default: MAX_NEWS_ARTICLES).
 
     Returns:
-        List of dicts with title, url, content, date. Empty on error.
+        List of dicts with title, url, content, date. Empty on error or if API key missing.
 
     """
     if not query or not query.strip():
         return []
 
-    max_results = max(1, min(20, max_results))
+    if not TAVILY_API_KEY:
+        print("Warning: TAVILY_API_KEY not set. News search disabled.")
+        return []
+
+    max_results = max(1, min(NEWS_API_MAX_RESULTS, max_results))
 
     try:
         client = TavilyClient(api_key=TAVILY_API_KEY)
@@ -107,6 +85,12 @@ def search_srag_news(query: str, max_results: int = 5) -> list[dict[str, Any]]:
                 )
         return articles
 
+    except (ValueError, KeyError, TypeError) as e:
+        print(f"Error parsing news response: {e}")
+        return []
+    except ConnectionError as e:
+        print(f"Error connecting to Tavily API: {e}")
+        return []
     except Exception as e:
         print(f"Error fetching news: {e}")
         return []
