@@ -71,7 +71,9 @@ def convert_types(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     date_formats = ["%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"]
     today = pd.Timestamp.now().normalize()
-    max_valid_year = today.year + 1  # Allow up to 1 year in future for data collection lag
+    max_valid_year = (
+        today.year + 1
+    )  # Allow up to 1 year in future for data collection lag
 
     for col_name in DATE_COLUMNS:
         if col_name not in df.columns:

@@ -461,7 +461,7 @@ When charts are displayed, you MUST:
 
    [Explicação do gráfico em 2-3 frases baseada nos dados reais]
    ```
-   
+
    IMPORTANT: Do NOT include "Gráfico aparece automaticamente aqui" or any placeholder text. The chart will render automatically - just provide the title, date range, and explanation.
 </requirements>
 

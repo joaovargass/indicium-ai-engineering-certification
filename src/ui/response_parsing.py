@@ -91,7 +91,7 @@ def _extract_tool_names(ai_messages: list[AIMessage]) -> set[str]:
     return tools
 
 
-def _extract_tool_outputs(
+def _extract_tool_outputs(  # noqa: C901
     messages: list,
 ) -> tuple[list[Figure], list[dict], str | None, str | None]:
     """
@@ -141,7 +141,7 @@ def _extract_tool_outputs(
             report_path = path
         if content:
             report_content = content
-        
+
         # Extract charts from generate_chat_report output
         parsed = parse_tool_content(msg.content)
         if parsed and "daily_chart_json" in parsed:
@@ -149,13 +149,21 @@ def _extract_tool_outputs(
             monthly_json = parsed.get("monthly_chart_json")
             if daily_json:
                 try:
-                    daily_dict = json.loads(daily_json) if isinstance(daily_json, str) else daily_json
+                    daily_dict = (
+                        json.loads(daily_json)
+                        if isinstance(daily_json, str)
+                        else daily_json
+                    )
                     chart_figures.append(Figure(daily_dict))
                 except Exception:
                     pass
             if monthly_json:
                 try:
-                    monthly_dict = json.loads(monthly_json) if isinstance(monthly_json, str) else monthly_json
+                    monthly_dict = (
+                        json.loads(monthly_json)
+                        if isinstance(monthly_json, str)
+                        else monthly_json
+                    )
                     chart_figures.append(Figure(monthly_dict))
                 except Exception:
                     pass

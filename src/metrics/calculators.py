@@ -291,11 +291,11 @@ def _calculate_icu_period(
     if len(icu_patients) > 0 and "DT_ENTUTI" in icu_patients.columns:
         data_max_date = icu_patients["DT_ENTUTI"].max().normalize()
         data_min_date = icu_patients["DT_ENTUTI"].min().normalize()
-        
+
         # Cap period_end to today - never use future dates
         today = pd.Timestamp.now().normalize()
         period_end = min(data_max_date, today)
-        
+
         desired_period_start = period_end - timedelta(days=lookback_days - 1)
         period_start = max(desired_period_start, data_min_date)
         period_limited = period_start > desired_period_start
