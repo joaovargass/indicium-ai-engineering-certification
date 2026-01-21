@@ -248,6 +248,77 @@ Ask questions in Portuguese about SRAG data:
 
 ---
 
+## Configuration and Environment
+
+Central reference for environment variables, config that depends on external sources, and behaviour when credentials or services are missing.
+
+### Environment Variables
+
+#### Required for full operation
+
+| Variable | Purpose |
+|----------|---------|
+| `OPENAI_API_KEY` | LLM (agent, report body, executive summary, metric explanations). If missing: calls fail. |
+| `TAVILY_API_KEY` | News search. If missing: `search_srag_news` returns `[]`, reports have no news. |
+
+#### Azure (ELT, DW, Synapse)
+
+See `scripts/azure-setup.sh` and README. Main: `STORAGE_ACCOUNT_NAME`, `FILE_SYSTEM_NAME`, `AZURE_SYNAPSE_SQL_ENDPOINT` or `AZURE_SQL_SERVER`, `AZURE_SQL_POOL_NAME` or `AZURE_SQL_DATABASE`, `AZURE_SQL_ADMIN_USER`, `AZURE_SQL_ADMIN_PASSWORD`, `AZURE_STORAGE_KEY` (for `save_to_dw`), `AZURE_SYNAPSE_WORKSPACE_NAME`, `AZURE_RESOURCE_GROUP`. For `az synapse sql pool resume/pause`: `AZURE_SQL_POOL_NAME`/`AZURE_SQL_DATABASE`, `AZURE_RESOURCE_GROUP`.
+
+#### Overrides (optional)
+
+| Variable | Default (in code) | Effect |
+|----------|-------------------|--------|
+| `OPENDATASUS_URL` | `https://dadosabertos.saude.gov.br/dataset/srag-2021-a-2024` | Dataset page for `get_dates()`. |
+| `IBGE_MUNICIPIOS_URL` | `https://servicodados.ibge.gov.br/api/v1/localidades/municipios` | API for `resolve_city_name`. |
+| `OPENAI_MODEL` | (use `DEFAULT_MODEL_NAME`) | Overrides model for agent and report LLM. |
+| `CNES_LEITOS_CSV_SEP` | `,` | Separator for CNES Leitos CSV. |
+| `SRAG_CSV_SEP` | `;` | Separator for SRAG live CSV in `extract.read_csv`. |
+| `ODBC_DRIVER_SQL_SERVER` | `ODBC+Driver+18+for+SQL+Server` | ODBC driver for Synapse. |
+| `SRAG_PROJECT_ROOT` | (derived from `config` path) | Base for `LOGS_DIR`, data, cache. |
+
+---
+
+### Config depending on external sources
+
+Adjust in `src/common/config.py` (or via env when supported) if the source changes.
+
+| Config | Used by | If source changes |
+|--------|---------|-------------------|
+| `OPENDATASUS_*` | `extract.get_dates` | Page wording/format: `OPENDATASUS_CONGELADO_KEYWORDS`, `OPENDATASUS_VIVO_KEYWORDS`, `OPENDATASUS_YEAR_PREFIX_REGEX`, `OPENDATASUS_DATE_REGEX`, `OPENDATASUS_DATE_INPUT_FORMATS`. |
+| `BASE_DOWNLOAD_URL`, `SRAG_FILE_PREFIX`, `SRAG_EXT_CONGELADO`, `SRAG_EXT_VIVO` | `extract.build_srag_url` | S3 paths or file naming. |
+| `CNES_LEITOS_URL_TEMPLATE`, `CNES_LEITOS_COL_*` | `retrieval/icu_beds` | URL or column renames; columns already validated, fallback used on mismatch. |
+| `IBGE_MUNICIPIOS_ID_KEY`, `IBGE_MUNICIPIOS_NOME_KEY` | `tools/location_utils` | JSON keys from IBGE API. |
+| `ESSENTIAL_COLUMNS`, `PRIMARY_KEY_FIELD`, `DATE_COLUMNS`, `CATEGORICAL_VALIDATIONS`, `IGNORED_FIELDS` | `elt/transform`, metrics, charts | Schema INFLUD: add/rename columns or codes. `select_essential` raises `ELTError` if `PRIMARY_KEY_FIELD` is missing. |
+| `PARSER_HEADER_PREFIX`, `PARSER_HEADER_SEP`, `PARSER_STOP_SECTIONS` | `report/parser` | Report template markdown. |
+| `FILE_PATH_EXTRACT_PATTERNS` | `ui/utils.extract_file_path` | Agent/tool output format for report path. |
+| `FALLBACK_ICU_BEDS`, `FALLBACK_BRAZIL_TOTAL`, `FALLBACK_ICU_BEDS_COMPETENCY` | `retrieval/icu_beds` | Static when CNES fails. Review when data is stale. |
+
+---
+
+### Behaviour when keys or services are missing
+
+| Case | Behaviour |
+|------|-----------|
+| `TAVILY_API_KEY` unset | News tools return `[]`; reports run without news. |
+| `OPENAI_API_KEY` unset | LLM calls fail; agent and report generation error. |
+| Azure / DW vars unset | `_get_sql_connection` or `get_client` raises; ELT or DW load fails. |
+| `OPENAI_MODEL` set | Overrides `DEFAULT_MODEL_NAME` for agent and report LLM. |
+| `DEFAULT_MODEL_NAME` | Check against [OpenAI models](https://platform.openai.com/docs/models); adjust if the name is invalid. |
+
+---
+
+### External contracts (summary)
+
+- **OpenDataSUS page**: `get_dates()` expects congelado/vivo and dates in text; keywords and `OPENDATASUS_YEAR_PREFIX_REGEX` must match.
+- **CNES Leitos CSV**: columns `COMP`, `UTI_TOTAL_EXIST`, `UF`; optional `MUNICIPIO`. Separator `CNES_LEITOS_CSV_SEP` (default `,`).
+- **IBGE API**: JSON array of `{id, nome, ...}`; `id` and `nome` keys configurable.
+- **Tavily**: `results` with `title`, `url`, `content` or `snippet`, `published_date`.
+- **Report tools**: `generate_download_report` → `file_path`, `report_summary`/`report_content`; `generate_chat_report` → `report_text`, `daily_chart_json`, `monthly_chart_json` (Plotly `Figure.to_dict()`-compatible).
+- **Charts PNG**: `kaleido` required for `figure_to_image_file`; system deps may be needed on some hosts.
+
+---
+
 ## Project Structure
 
 ```
@@ -419,18 +490,23 @@ flowchart LR
 
 </div>
 
-**ELT pipeline overview: the three main phases (Extract, Load, Transform) with state management.**
+**ELT pipeline overview: the complete flow from data extraction through transformation and loading.**
 
 <div align="center">
 
 ```mermaid
 flowchart LR
-    Start([Start]) --> Extract[Extract<br/>Download from OpenDataSUS<br/>Upload to Azure Data Lake]
-    Extract --> Load[Load<br/>Combine Deltas<br/>Upload to Synapse]
-    Load --> Transform[Transform<br/>9 Cleaning Steps<br/>Data Validation<br/>Update Cache]
-    Transform --> End([Complete])
+    Start([Start]) --> Datas[Fetch Dates<br/>OpenDataSUS Page]
+    Datas --> Extract[Extract<br/>Download from OpenDataSUS]
+    Extract --> Upload[Upload Deltas<br/>Azure Data Lake]
+    Upload --> Download[Download Deltas<br/>Unprocessed Files]
+    Download --> Transform[Transform<br/>9 Cleaning Steps]
+    Transform --> Load[Load to DW<br/>Azure Synapse]
+    Load --> Cache[Update Cache<br/>Local Parquet]
+    Cache --> Estado[Save State<br/>Extraction Date]
+    Estado --> End([Complete])
     
-    State[State Files<br/>raw/state.json<br/>dw_state.json] -.->|Track Progress| Extract
+    State[State Files<br/>raw/state.json<br/>clean/dw_state.json] -.->|Track Progress| Upload
     State -.->|Track Progress| Load
     
     classDef extractStyle fill:#2563eb,stroke:#1e40af,stroke-width:3px,color:#fff
@@ -439,11 +515,11 @@ flowchart LR
     classDef stateStyle fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#fff
     classDef startEndStyle fill:#1e40af,stroke:#1e3a8a,stroke-width:3px,color:#fff
     
-    class Extract extractStyle
+    class Extract,Upload,Download extractStyle
     class Transform transformStyle
-    class Load loadStyle
+    class Load,Cache,Estado loadStyle
     class State stateStyle
-    class Start,End startEndStyle
+    class Start,End,Datas startEndStyle
 ```
 
 </div>
@@ -487,7 +563,7 @@ sequenceDiagram
 
 </div>
 
-The platform follows a modular, layered architecture with clear separation of concerns. The **LangGraph StateGraph** orchestrates agent decisions through a defined workflow: Agent Node → Router → Tool Node → Agent Node. Data flows through an incremental ELT pipeline (Extract → Load → Transform) with delta-based updates stored in Azure Data Lake Gen2 and processed in Azure Synapse Analytics. The architecture uses centralized configuration (`common.config`), local caching for performance, and a tool-based abstraction layer between the agent and data operations.
+The platform follows a modular, layered architecture with clear separation of concerns. The **LangGraph StateGraph** orchestrates agent decisions through a defined workflow: Agent Node → Router → Tool Node → Agent Node. Data flows through an incremental ELT pipeline (Fetch Dates → Extract → Upload Deltas → Download Deltas → Transform → Load to DW → Update Cache → Save State) with delta-based updates stored in Azure Data Lake Gen2 and processed in Azure Synapse Analytics. The architecture uses centralized configuration (`common.config`), local caching for performance, and a tool-based abstraction layer between the agent and data operations.
 
 ### Governance & Transparency
 
@@ -511,8 +587,9 @@ The codebase follows clean code principles with modular organization, single-res
 
 ### AI Model Configuration
 
-- **Default Model**: `gpt-5-nano` (configurable in `src/common/config.py`)
+- **Default Model**: `gpt-5-nano` (configurable in `src/common/config.py`). Override with `OPENAI_MODEL`.
 - **Temperature**: 0.0 for agent responses, 0.3 for report generation
+- **Config and env**: see [Configuration and Environment](#configuration-and-environment) for env overrides, config that depends on external sources, and behaviour when keys are missing.
 - **Framework**: LangGraph for agent orchestration, LangChain for tool integration
 
 ### Data Sources

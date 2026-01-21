@@ -3,6 +3,7 @@
 from typing import Any
 
 from common.config import REPORT_CONTENT_PREVIEW_LENGTH
+from common.logging import logger
 from report.llm import _get_llm
 
 
@@ -60,7 +61,8 @@ def generate_report_body(
         sources_section = _build_sources_section(news) if include_news and news else ""
 
         return report_body, sources_section
-    except Exception:
+    except Exception as e:
+        logger.warning("LLM failed to generate report body, using fallback: %s", e)
         return _build_fallback_report(
             location, metrics, news, include_metrics, include_news
         )
@@ -129,7 +131,8 @@ def _build_metrics_context(metrics: dict[str, Any]) -> str:
                 if max_period_end_date is None or pe_date > max_period_end_date:
                     max_period_end_date = pe_date
                     max_period_end = pe_date.strftime("%Y-%m-%d")
-            except Exception:
+            except Exception as e:
+                logger.debug("Could not parse period_end date %s: %s", pe, e)
                 continue
 
     date_context = ""

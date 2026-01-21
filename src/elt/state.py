@@ -78,7 +78,8 @@ def get_extraction_date() -> str | None:
         if res is not None:
             _EXTRACTION_DATE_CACHE.set("last_extraction_date", res)
         return res
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to fetch extraction date from Azure, using cache: %s", e)
         return _EXTRACTION_DATE_CACHE.get("last_extraction_date")
 
 
@@ -95,7 +96,8 @@ def get_last_live_date() -> str | None:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
             f = ex.submit(_fetch_last_live_date_from_azure)
             return f.result(timeout=5)
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to fetch last live date from Azure: %s", e)
         return None
 
 

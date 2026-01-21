@@ -11,7 +11,8 @@ load_dotenv()
 # =============================================================================
 # Path Configuration
 # =============================================================================
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(os.getenv("SRAG_PROJECT_ROOT", str(_DEFAULT_PROJECT_ROOT)))
 SRC_PATH = PROJECT_ROOT / "src"
 DATA_DIR = PROJECT_ROOT / "data"
 CACHE_DIR = DATA_DIR / "cleaned"
@@ -81,7 +82,8 @@ FALLBACK_ICU_BEDS = {
     "RR": 105,
 }
 FALLBACK_BRAZIL_TOTAL = 63401
-# Competency (YYYYMM) for fallback when CNES API and cache unavailable
+# Competency (YYYYMM) for fallback when CNES API and cache unavailable.
+# Static Dec 2024; review when CNES unavailable for long or data is stale.
 FALLBACK_ICU_BEDS_COMPETENCY = 202412
 
 # Mapping from IBGE state code (first 2 digits) to UF
@@ -173,6 +175,7 @@ REPORT_CONTENT_PREVIEW_LENGTH = 300
 # LLM Configuration
 # =============================================================================
 DEFAULT_MODEL_NAME = "gpt-5-nano"
+OPENAI_MODEL = os.getenv("OPENAI_MODEL")  # Overrides DEFAULT_MODEL_NAME when set.
 DEFAULT_TEMPERATURE = 0.0
 REPORT_TEMPERATURE = 0.3
 
@@ -218,11 +221,40 @@ NO_DATA_MESSAGE_METRICS = _NO_DATA_MESSAGE_TEMPLATE.format(action="fazer consult
 NO_DATA_MESSAGE_CHARTS = _NO_DATA_MESSAGE_TEMPLATE.format(action="gerar gráficos")
 
 # =============================================================================
-# External API URLs
+# External API URLs and source-specific settings (adjust if source changes)
 # =============================================================================
 CNES_LEITOS_URL_TEMPLATE = (
     "https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/Leitos_SUS/Leitos_{year}.csv"
 )
+# CNES Leitos CSV separator; override: CNES_LEITOS_CSV_SEP.
+CNES_LEITOS_CSV_SEP = os.getenv("CNES_LEITOS_CSV_SEP", ",")
+# CNES Leitos CSV columns; change if CNES renames them
+CNES_LEITOS_COL_COMP = "COMP"
+CNES_LEITOS_COL_UTI = "UTI_TOTAL_EXIST"
+CNES_LEITOS_COL_UF = "UF"
+CNES_LEITOS_COL_MUNICIPIO = "MUNICIPIO"
+
+# IBGE municipios API; change if endpoint or JSON keys change. Override: IBGE_MUNICIPIOS_URL.
+IBGE_MUNICIPIOS_URL = os.getenv(
+    "IBGE_MUNICIPIOS_URL",
+    "https://servicodados.ibge.gov.br/api/v1/localidades/municipios",
+)
+IBGE_MUNICIPIOS_ID_KEY = "id"
+IBGE_MUNICIPIOS_NOME_KEY = "nome"
+
+# OpenDataSUS date parsing; change if the dataset page wording/format changes
+OPENDATASUS_DATE_REGEX = r"\d{2}/\d{2}/\d{4}"
+OPENDATASUS_DATE_INPUT_FORMATS = ["%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"]
+OPENDATASUS_CONGELADO_KEYWORDS = ["congelado", "parquet"]
+OPENDATASUS_VIVO_KEYWORDS = ["vivo", "csv"]
+OPENDATASUS_YEAR_PREFIX_REGEX = r"^(\d{4})\s*-"
+
+# SRAG live CSV separator; override: SRAG_CSV_SEP.
+SRAG_CSV_SEP = os.getenv("SRAG_CSV_SEP", ";")
+# SRAG file naming on S3; change if path/prefix or extensions change
+SRAG_FILE_PREFIX = "INFLUD"
+SRAG_EXT_CONGELADO = "parquet"
+SRAG_EXT_VIVO = "csv"
 
 # =============================================================================
 # Execution Flags
@@ -244,7 +276,11 @@ DW_STATE_PATH = "clean/dw_state.json"
 
 # Data source configuration
 BASE_DOWNLOAD_URL = "https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SRAG"
-OPENDATASUS_URL = "https://dadosabertos.saude.gov.br/dataset/srag-2021-a-2024"
+# OpenDataSUS dataset page; override: OPENDATASUS_URL.
+OPENDATASUS_URL = os.getenv(
+    "OPENDATASUS_URL",
+    "https://dadosabertos.saude.gov.br/dataset/srag-2021-a-2024",
+)
 # Start year for data collection (ELT and display)
 START_YEAR = 2023
 
@@ -321,6 +357,11 @@ COVID_VACCINE_DATE_COLS = [
     "DOSE_ADIC",
     "DOS_RE_BI",
 ]
+
+# ODBC driver for SQL Server; override via ODBC_DRIVER_SQL_SERVER if needed
+ODBC_DRIVER_SQL_SERVER = os.getenv(
+    "ODBC_DRIVER_SQL_SERVER", "ODBC+Driver+18+for+SQL+Server"
+)
 
 # Azure Data Warehouse configuration
 DW_FULLY_QUALIFIED_TABLE = "dbo.srag_cleaned"

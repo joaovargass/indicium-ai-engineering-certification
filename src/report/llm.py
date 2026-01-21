@@ -4,7 +4,13 @@ from typing import Any
 
 from langchain_openai import ChatOpenAI
 
-from common.config import ARTICLE_PREVIEW_LENGTH, DEFAULT_MODEL_NAME, REPORT_TEMPERATURE
+from common.config import (
+    ARTICLE_PREVIEW_LENGTH,
+    DEFAULT_MODEL_NAME,
+    OPENAI_MODEL,
+    REPORT_TEMPERATURE,
+)
+from common.logging import logger
 
 # LLM instance for generating explanations (lazy initialization)
 _llm: ChatOpenAI | None = None
@@ -14,7 +20,8 @@ def _get_llm() -> ChatOpenAI:
     """Get or create LLM instance (lazy initialization)."""
     global _llm
     if _llm is None:
-        _llm = ChatOpenAI(model=DEFAULT_MODEL_NAME, temperature=REPORT_TEMPERATURE)
+        model = OPENAI_MODEL or DEFAULT_MODEL_NAME
+        _llm = ChatOpenAI(model=model, temperature=REPORT_TEMPERATURE)
     return _llm
 
 
@@ -78,7 +85,8 @@ Resumo Executivo:"""
         if content.startswith("Resumo Executivo:"):
             content = content.replace("Resumo Executivo:", "", 1).strip()
         return content
-    except Exception:
+    except Exception as e:
+        logger.warning("LLM failed to generate executive summary: %s", e)
         return f"Análise consolidada dos dados SRAG para {location}. Os dados indicam uma situação que requer monitoramento contínuo."
 
 
@@ -140,7 +148,8 @@ def _check_data_outdated(period_end: str | None) -> tuple[str, str | None, str |
             return note, today_str, period_end_str
         else:
             return "", today_str, period_end_str
-    except Exception:
+    except Exception as e:
+        logger.warning("Error checking data outdated status: %s", e)
         return "", today_str, None
 
 
@@ -215,5 +224,8 @@ Explicação:"""
         llm = _get_llm()
         response = llm.invoke(prompt)
         return response.content.strip()
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            "LLM failed to generate explanation for metric %s: %s", metric_name, e
+        )
         return f"Este valor indica a situação atual da {metric_name_pt.lower()} no período analisado."

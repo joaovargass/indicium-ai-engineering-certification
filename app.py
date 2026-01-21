@@ -21,6 +21,7 @@ from common.config import (  # noqa: E402
     DEFAULT_HOST,
     DEFAULT_PORT,
 )
+from common.logging import logger  # noqa: E402
 from ui.callbacks import register_chat_callbacks  # noqa: E402
 from ui.elt_callbacks import register_elt_callbacks  # noqa: E402
 from ui.layout import create_chat_layout  # noqa: E402
@@ -80,6 +81,7 @@ def _create_layout() -> dbc.Container:
 def main() -> None:
     """Run the Dash application."""
     app = create_app()
+    logger.info("Starting application at http://{}:{}", DEFAULT_HOST, DEFAULT_PORT)
     app.run(debug=True, host=DEFAULT_HOST, port=DEFAULT_PORT)
 
 

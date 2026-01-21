@@ -16,9 +16,18 @@ from bs4 import BeautifulSoup
 from common.config import (
     BASE_DOWNLOAD_URL,
     DOWNLOAD_ENABLED,
+    OPENDATASUS_CONGELADO_KEYWORDS,
+    OPENDATASUS_DATE_INPUT_FORMATS,
+    OPENDATASUS_DATE_REGEX,
     OPENDATASUS_URL,
+    OPENDATASUS_VIVO_KEYWORDS,
+    OPENDATASUS_YEAR_PREFIX_REGEX,
     REQUEST_HEAD_TIMEOUT_SECONDS,
     REQUEST_TIMEOUT_SECONDS,
+    SRAG_CSV_SEP,
+    SRAG_EXT_CONGELADO,
+    SRAG_EXT_VIVO,
+    SRAG_FILE_PREFIX,
     START_YEAR,
 )
 from common.logging import logger
@@ -38,9 +47,20 @@ def build_srag_url(year: int, date_str: str, kind: str) -> str:
         Full URL to the data file
 
     """
-    ext = "parquet" if kind == "congelado" else "csv"
+    ext = SRAG_EXT_CONGELADO if kind == "congelado" else SRAG_EXT_VIVO
     year_str = str(year)[2:]
-    return f"{BASE_DOWNLOAD_URL}/{year}/INFLUD{year_str}-{date_str}.{ext}"
+    return f"{BASE_DOWNLOAD_URL}/{year}/{SRAG_FILE_PREFIX}{year_str}-{date_str}.{ext}"
+
+
+def _parse_date_to_dd_mm_yyyy(raw: str) -> str:
+    """Parse a date string using configurable formats; return dd-mm-yyyy for URL building."""
+    for fmt in OPENDATASUS_DATE_INPUT_FORMATS:
+        try:
+            dt = datetime.strptime(raw, fmt)
+            return dt.strftime("%d-%m-%Y")
+        except ValueError:
+            continue
+    return raw.replace("/", "-")
 
 
 def get_dates(
@@ -50,9 +70,6 @@ def get_dates(
     freeze_date_str = None
     live_date_str = None
     live_year = None
-    date_pattern = r"\d{2}/\d{2}/\d{4}"
-    # e.g. "2025- Banco vivo 22/12/2025" -> live_year=2025
-    year_prefix_pattern = r"^(\d{4})\s*-"
 
     try:
         response = requests.get(page_url, timeout=REQUEST_TIMEOUT_SECONDS)
@@ -61,16 +78,15 @@ def get_dates(
 
         for text in soup.stripped_strings:
             text_lower = text.lower()
-            date_match = re.search(date_pattern, text)
+            date_match = re.search(OPENDATASUS_DATE_REGEX, text)
 
             if date_match:
-                date_str = date_match.group(0)
-                date_formatted = date_str.replace("/", "-")
+                raw = date_match.group(0)
+                date_formatted = _parse_date_to_dd_mm_yyyy(raw)
 
                 if not only_live:
                     is_congelado = (
-                        "congelado" in text_lower
-                        and "parquet" in text_lower
+                        all(k in text_lower for k in OPENDATASUS_CONGELADO_KEYWORDS)
                         and not freeze_date_str
                     )
                     if is_congelado:
@@ -78,11 +94,12 @@ def get_dates(
                         logger.info(f"Found freeze date: {freeze_date_str}")
 
                 is_vivo = (
-                    "vivo" in text_lower and "csv" in text_lower and not live_date_str
+                    all(k in text_lower for k in OPENDATASUS_VIVO_KEYWORDS)
+                    and not live_date_str
                 )
                 if is_vivo:
                     live_date_str = date_formatted
-                    year_match = re.match(year_prefix_pattern, text.strip())
+                    year_match = re.match(OPENDATASUS_YEAR_PREFIX_REGEX, text.strip())
                     if year_match:
                         live_year = int(year_match.group(1))
                     logger.info(f"Found live date: {live_date_str}, year: {live_year}")
@@ -154,7 +171,7 @@ def read_csv(file_path: Path) -> pd.DataFrame:
     try:
         return pd.read_csv(
             file_path,
-            sep=";",
+            sep=SRAG_CSV_SEP,
             quotechar='"',
             doublequote=True,
             low_memory=False,
@@ -165,17 +182,18 @@ def read_csv(file_path: Path) -> pd.DataFrame:
         try:
             return pd.read_csv(
                 file_path,
-                sep=";",
+                sep=SRAG_CSV_SEP,
                 quotechar='"',
                 doublequote=True,
                 low_memory=False,
                 dtype=str,
                 encoding="latin-1",
             )
-        except Exception:
+        except Exception as e:
+            logger.debug("CSV read with latin-1 failed, trying python engine: %s", e)
             return pd.read_csv(
                 file_path,
-                sep=";",
+                sep=SRAG_CSV_SEP,
                 quotechar='"',
                 doublequote=True,
                 low_memory=False,
@@ -222,10 +240,11 @@ def download_frozen(
                 return pd.read_parquet(parquet_files[0])
             except Exception as e:
                 raise ELTError("extracao", f"Falha ao ler congelado {year}: {e}") from e
-        raise ELTError(
-            "extracao",
-            f"Download desabilitado e arquivo local ausente para congelado {year}.",
+        logger.warning(
+            "Download disabled and local file missing for frozen %s; year skipped.",
+            year,
         )
+        return None
 
     existing = list(year_dir.glob("*.parquet"))
     if existing:
@@ -301,10 +320,11 @@ def download_live(
         if csv_files:
             logger.info(f"Using local CSV for {year_from_date}: {csv_files[0].name}")
             return read_csv(csv_files[0]), True
-        raise ELTError(
-            "extracao",
-            f"Download desabilitado e arquivo local ausente para vivo {year_from_date}.",
+        logger.warning(
+            "Download disabled and local file missing for live %s; year skipped.",
+            year_from_date,
         )
+        return None, False
 
     for old_csv in year_dir.glob("*.csv"):
         logger.info(f"Removing outdated live file: {old_csv.name}")

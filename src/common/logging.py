@@ -1,12 +1,11 @@
 """Unified logging via loguru: console (stderr) and logs/app.log with rotation. Import logger from common.logging."""
 
 import sys
-from pathlib import Path
 
 from loguru import logger
 
-# Project root for log file location
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+from common.config import PROJECT_ROOT
+
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 

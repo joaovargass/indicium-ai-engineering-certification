@@ -14,6 +14,7 @@ from common.config import (
     PRIMARY_KEY_FIELD,
 )
 from common.logging import logger
+from elt.errors import ELTError
 
 
 def _get_string_cols(df: pd.DataFrame) -> list[str]:
@@ -193,6 +194,7 @@ def _impute_vaccine(df: pd.DataFrame) -> pd.DataFrame:
         if mask.any():
             df.loc[mask, "VACINA_COV"] = "2"
 
+    # DT_UT_DOSE is not in ESSENTIAL_COLUMNS; if added to schema, this imputes VACINA=1 when dose date exists.
     if all(c in df.columns for c in ["VACINA", "DT_UT_DOSE"]):
         mask = df["VACINA"].isna() & df["DT_UT_DOSE"].notna()
         if mask.any():
@@ -311,6 +313,13 @@ def select_essential(df: pd.DataFrame) -> pd.DataFrame:
     """Select only essential columns."""
     available = df.columns.tolist()
     missing = [c for c in ESSENTIAL_COLUMNS if c not in available]
+
+    if PRIMARY_KEY_FIELD in missing:
+        raise ELTError(
+            "transform",
+            f"Coluna obrigatória ausente: {PRIMARY_KEY_FIELD}. "
+            f"Ajuste ESSENTIAL_COLUMNS em config se o esquema da fonte mudou. Ausentes: {missing}",
+        )
 
     cols = ESSENTIAL_COLUMNS
     if missing:

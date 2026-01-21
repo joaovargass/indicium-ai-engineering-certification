@@ -7,9 +7,17 @@ from pathlib import Path
 from dash import html
 from plotly.graph_objects import Figure
 
+from common.logging import logger
 from elt.load import get_extraction_date
 from ui.constants import WELCOME_MESSAGE
 from ui.message import create_message_bubble
+
+# Regexes to find report file path in agent text; extend if tool output format changes
+FILE_PATH_EXTRACT_PATTERNS = [
+    r"(/[^\s]+/reports/[^\s]+\.md)",
+    r"File path:\s*([^\s\n]+\.md)",
+    r'file_path["\']?:\s*["\']?([^\s"\',\n]+\.md)',
+]
 
 
 def get_initial_store() -> dict:
@@ -52,12 +60,7 @@ def render_messages(messages: list[dict]) -> list:
 
 def extract_file_path(text: str) -> str | None:
     """Extract report file path from response text."""
-    patterns = [
-        r"(/[^\s]+/reports/[^\s]+\.md)",
-        r"File path:\s*([^\s\n]+\.md)",
-        r'file_path["\']?:\s*["\']?([^\s"\',\n]+\.md)',
-    ]
-    for pattern in patterns:
+    for pattern in FILE_PATH_EXTRACT_PATTERNS:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
             file_path = match.group(1)
@@ -73,7 +76,8 @@ def format_extraction_date(date_str: str | None) -> str:
     try:
         dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         return f"Última extração: {dt.strftime('%d/%m/%Y %H:%M')}"
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to format extraction date %s: %s", date_str, e)
         return f"Última extração: {date_str}"
 
 
@@ -90,7 +94,8 @@ def format_vivo_date(s: str | None) -> str | None:
     try:
         dt = datetime.strptime(s.strip(), "%d-%m-%Y")
         return dt.strftime("%d/%m/%Y")
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to format live date %s: %s", s, e)
         return None
 
 
@@ -112,10 +117,10 @@ def build_extraction_and_vivo_children(extraction_display: str) -> list:
         if vivo_fmt:
             parts.append(
                 html.P(
-                    f"Data da fonte (vivo): {vivo_fmt}",
+                    f"Última data da fonte : {vivo_fmt}",
                     className=f"{cls} last-extraction-date",
                 )
             )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to get last live source date: %s", e)
     return parts

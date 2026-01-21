@@ -22,6 +22,7 @@ from dash.exceptions import PreventUpdate
 
 from agent import invoke_agent
 from agent.graph import _to_langchain_messages
+from common.logging import logger
 from ui.constants import (
     LOADING_DEFAULT_MESSAGE,
     LOADING_HIDDEN_CLASS,
@@ -321,6 +322,7 @@ def _process_agent_response(
         )
 
     except Exception as e:
+        logger.warning("Error processing agent response: %s", e)
         messages.append(
             {
                 "role": "assistant",

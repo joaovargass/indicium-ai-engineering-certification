@@ -2,12 +2,17 @@
 
 from common.config import REPORT_SUMMARY_MAX_CHARS, REPORT_SUMMARY_PARAGRAPH_LENGTH
 
+# Headers and separators for extraction; change if report template changes
+PARSER_HEADER_PREFIX = "Relatório SRAG"
+PARSER_HEADER_SEP = "—"
+PARSER_STOP_SECTIONS = ("Gráfico", "Visualizações", "Fontes")
+
 
 def _extract_location(lines: list[str]) -> str | None:
     """Extract location from report header."""
     for line in lines:
-        if "Relatório SRAG" in line and "—" in line:
-            return line.split("—")[-1].strip()
+        if PARSER_HEADER_PREFIX in line and PARSER_HEADER_SEP in line:
+            return line.split(PARSER_HEADER_SEP)[-1].strip()
     return None
 
 
@@ -15,8 +20,8 @@ def _extract_report_body(lines: list[str]) -> str:
     """Extract report body text, stopping at charts/sources sections."""
     report_body_lines = []
     for line in lines:
-        if line.strip().startswith("##") and (
-            "Gráfico" in line or "Visualizações" in line or "Fontes" in line
+        if line.strip().startswith("##") and any(
+            s in line for s in PARSER_STOP_SECTIONS
         ):
             break
         if line.strip().startswith("---"):

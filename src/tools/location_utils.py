@@ -4,7 +4,14 @@ import json
 
 import requests
 
-from common.config import CITY_MAPPING_PATH, LOCATION_REQUEST_TIMEOUT_SECONDS
+from common.config import (
+    CITY_MAPPING_PATH,
+    IBGE_MUNICIPIOS_ID_KEY,
+    IBGE_MUNICIPIOS_NOME_KEY,
+    IBGE_MUNICIPIOS_URL,
+    LOCATION_REQUEST_TIMEOUT_SECONDS,
+)
+from common.logging import logger
 
 
 def resolve_city_name(city_code: str) -> str | None:
@@ -23,12 +30,14 @@ def resolve_city_name(city_code: str) -> str | None:
             with open(CITY_MAPPING_PATH, encoding="utf-8") as f:
                 mapping = json.load(f)
             return mapping.get(str(city_code))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "Error loading city mapping cache %s: %s", CITY_MAPPING_PATH, e
+            )
 
     try:
         response = requests.get(
-            "https://servicodados.ibge.gov.br/api/v1/localidades/municipios",
+            IBGE_MUNICIPIOS_URL,
             timeout=LOCATION_REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
@@ -36,16 +45,20 @@ def resolve_city_name(city_code: str) -> str | None:
 
         mapping = {}
         for city in data:
-            code_6digit = str(city["id"])[:6]
-            if code_6digit not in mapping:
-                mapping[code_6digit] = city["nome"]
+            raw_id = city.get(IBGE_MUNICIPIOS_ID_KEY)
+            raw_nome = city.get(IBGE_MUNICIPIOS_NOME_KEY)
+            if raw_id is not None and raw_nome is not None:
+                code_6digit = str(raw_id)[:6]
+                if code_6digit not in mapping:
+                    mapping[code_6digit] = str(raw_nome)
 
         CITY_MAPPING_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(CITY_MAPPING_PATH, "w", encoding="utf-8") as f:
             json.dump(mapping, f, ensure_ascii=False, indent=2)
 
         return mapping.get(str(city_code))
-    except Exception:
+    except Exception as e:
+        logger.warning("Error fetching municipalities from IBGE API: %s", e)
         return None
 
 

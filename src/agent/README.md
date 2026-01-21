@@ -51,19 +51,28 @@ flowchart LR
 ## Key Components
 
 **`graph.py`**:
-- `create_agent_graph()`: Builds and compiles StateGraph
-- `invoke_agent()`: Entry point with streaming support via `graph.stream()`
-- `create_agent_node()`: LLM-powered decision node
-- `create_tool_node()`: Sequential/parallel tool execution
-- `should_continue()`: Conditional routing logic
+- `create_agent_graph()`: Builds and compiles StateGraph with optional checkpointer
+- `invoke_agent()`: Entry point with streaming support via `graph.stream()`, optional step callbacks and conversation history
+- `create_agent_node()`: LLM-powered decision node that binds tools and injects system prompt
+- `create_tool_node()`: Sequential tool execution with step callbacks, or parallel ToolNode if no callback
+- `should_continue()`: Conditional routing logic (routes to tools if tool_calls exist, otherwise ends)
+- `_invoke_with_streaming()`: Synchronous streaming using `graph.stream()` with step callbacks
+- `_to_langchain_messages()`: Converts UI message format to LangChain message objects
+- `_build_messages_list()`: Builds messages list from history and current user message
+- `_extract_tool_call_info()`: Extracts tool name, id, and args from tool call objects (used by `create_tool_node()`)
+- `_execute_tool()`: Executes a single tool and returns ToolMessage with result or error (used by `create_tool_node()`)
 
 **`prompts.py`**:
-- `SYSTEM_PROMPT`: 495-line prompt defining tool selection rules, response formatting (HTML tables, Portuguese), geographic filtering (Brazil-only), and guardrails
+- `SYSTEM_PROMPT`: 500+ line prompt defining tool selection rules, response formatting (HTML tables, Portuguese), geographic filtering (Brazil-only), guardrails, and execution workflows
+- Includes detailed examples, confirmation formats, and formatting requirements
 
 ## Technical Details
 
 - **Streaming**: Uses `graph.stream(stream_mode="values")` with step callbacks for UI progress
-- **Memory**: Optional `MemorySaver` checkpointer (disabled by default due to Dash threading)
-- **Tools**: Dynamically binds 9 tools from `tools.ALL_TOOLS`
-- **Config**: Default model `gpt-5-nano`, temperature `0.0`; tool step/result delays in `common.config`
-- **Logging**: `common.logging` for stream fallback and tool execution
+- **Memory**: Optional `MemorySaver` checkpointer (disabled by default due to Dash threading issues)
+- **Tools**: Dynamically binds 9 tools from `tools.ALL_TOOLS` via `llm.bind_tools()`
+- **Config**: Default model `gpt-5-nano` (override with `OPENAI_MODEL`), temperature `0.0`; tool step/result delays in `common.config`
+- **Logging**: `common.logging` for stream fallback and tool execution warnings
+- **Tool Execution**: Sequential execution when step_callback provided (for UI progress), parallel otherwise
+- **State**: `AgentState` TypedDict with `messages` (Annotated list with `add_messages`) and `thread_id`
+- **Error Handling**: Tool execution errors caught and returned as ToolMessage with error content

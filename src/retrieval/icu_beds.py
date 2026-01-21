@@ -10,6 +10,11 @@ import requests
 
 from common.config import (
     CACHE_DIR,
+    CNES_LEITOS_COL_COMP,
+    CNES_LEITOS_CSV_SEP,
+    CNES_LEITOS_COL_MUNICIPIO,
+    CNES_LEITOS_COL_UF,
+    CNES_LEITOS_COL_UTI,
     CNES_LEITOS_URL_TEMPLATE,
     FALLBACK_BRAZIL_TOTAL,
     FALLBACK_ICU_BEDS,
@@ -59,7 +64,8 @@ def _load_cache() -> dict | None:
         cache["icu_beds_by_city"] = icu_beds_by_city
 
         return cache
-    except Exception:
+    except Exception as e:
+        logger.warning("Error loading ICU beds cache: %s", e)
         return None
 
 
@@ -98,33 +104,55 @@ def _fetch_from_api(year: int | None = None) -> dict | None:
 
         df = pd.read_csv(
             StringIO(response.text),
-            sep=",",
+            sep=CNES_LEITOS_CSV_SEP,
             quotechar='"',
             on_bad_lines="skip",
             dtype=str,
         )
 
-        for col in ["UTI_TOTAL_EXIST", "COMP"]:
+        for col in [CNES_LEITOS_COL_UTI, CNES_LEITOS_COL_COMP]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        latest_comp = df["COMP"].max()
-        df_latest = df[df["COMP"] == latest_comp]
+        required = [CNES_LEITOS_COL_COMP, CNES_LEITOS_COL_UTI, CNES_LEITOS_COL_UF]
+        if any(c not in df.columns for c in required):
+            logger.warning(
+                "CNES Leitos CSV missing required columns (expected %s); check CNES_LEITOS_COL_* in config.",
+                required,
+            )
+            return None
 
-        icu_by_uf = df_latest.groupby("UF")["UTI_TOTAL_EXIST"].sum().to_dict()
-        brazil_total = int(df_latest["UTI_TOTAL_EXIST"].sum())
-        icu_by_uf = {k: int(v) for k, v in icu_by_uf.items()}
-        city_beds = (
-            df_latest.groupby(["UF", "MUNICIPIO"])["UTI_TOTAL_EXIST"]
-            .sum()
-            .reset_index()
+        latest_comp = df[CNES_LEITOS_COL_COMP].max()
+        df_latest = df[df[CNES_LEITOS_COL_COMP] == latest_comp]
+
+        icu_by_uf = (
+            df_latest.groupby(CNES_LEITOS_COL_UF)[CNES_LEITOS_COL_UTI].sum().to_dict()
         )
+        brazil_total = int(df_latest[CNES_LEITOS_COL_UTI].sum())
+        icu_by_uf = {k: int(v) for k, v in icu_by_uf.items()}
+
+        if CNES_LEITOS_COL_MUNICIPIO not in df_latest.columns:
+            city_beds = pd.DataFrame(
+                columns=[
+                    CNES_LEITOS_COL_UF,
+                    CNES_LEITOS_COL_MUNICIPIO,
+                    CNES_LEITOS_COL_UTI,
+                ]
+            )
+        else:
+            city_beds = (
+                df_latest.groupby([CNES_LEITOS_COL_UF, CNES_LEITOS_COL_MUNICIPIO])[
+                    CNES_LEITOS_COL_UTI
+                ]
+                .sum()
+                .reset_index()
+            )
         icu_by_city = {}
         for _, row in city_beds.iterrows():
-            uf = row["UF"]
-            city_name = _normalize_city_name(str(row["MUNICIPIO"]))
+            uf = row[CNES_LEITOS_COL_UF]
+            city_name = _normalize_city_name(str(row[CNES_LEITOS_COL_MUNICIPIO]))
             key = (uf, city_name)
-            icu_by_city[key] = int(row["UTI_TOTAL_EXIST"])
+            icu_by_city[key] = int(row[CNES_LEITOS_COL_UTI])
 
         return {
             "competency": int(latest_comp),
@@ -195,7 +223,7 @@ def get_icu_beds_data(
         "icu_beds_by_uf": FALLBACK_ICU_BEDS.copy(),
         "icu_beds_by_city": {},
         "brazil_total": FALLBACK_BRAZIL_TOTAL,
-        "source": "fallback",
+        "source": f"fallback (estático, competência {FALLBACK_ICU_BEDS_COMPETENCY})",
     }
 
 

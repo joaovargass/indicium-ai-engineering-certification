@@ -22,6 +22,7 @@ from common.config import (
     DEFAULT_DAYS,
     DEFAULT_MONTHS,
 )
+from common.logging import logger
 
 
 def figure_to_json(fig: Figure) -> str:
@@ -48,7 +49,14 @@ def figure_to_image_file(
         Path to saved image file
 
     """
-    pio.write_image(fig, str(file_path), format="png", width=width, height=height)
+    try:
+        pio.write_image(fig, str(file_path), format="png", width=width, height=height)
+    except Exception as e:
+        logger.warning("Failed to export chart as PNG: %s", e)
+        raise RuntimeError(
+            "Failed to export chart as PNG. Ensure 'kaleido' is installed "
+            "(pip install kaleido) and system dependencies are correct."
+        ) from e
     return file_path
 
 

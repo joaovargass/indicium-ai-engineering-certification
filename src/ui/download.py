@@ -7,6 +7,8 @@ import dash_bootstrap_components as dbc
 from dash import html
 from dash.exceptions import PreventUpdate
 
+from common.logging import logger
+
 
 def create_download_button(file_path: str, button_id: str | None = None) -> html.Div:
     """
@@ -112,6 +114,7 @@ def handle_download_click(
             content = f.read()
         return ({"content": content, "filename": report_path.name}, [])
     except Exception as e:
+        logger.warning("Error reading file for download %s: %s", report_path, e)
         return (
             None,
             [

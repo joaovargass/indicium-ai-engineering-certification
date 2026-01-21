@@ -162,9 +162,7 @@ def _extract_tool_outputs(  # noqa: C901
                     )
                     chart_figures.append(Figure(daily_dict))
                 except Exception as e:
-                    logger.warning(
-                        "Falha ao interpretar gráfico diário do relatório: %s", e
-                    )
+                    logger.warning("Failed to parse daily chart from report: %s", e)
                     chart_warnings.add(
                         "Gráfico do relatório não pôde ser interpretado."
                     )
@@ -177,9 +175,7 @@ def _extract_tool_outputs(  # noqa: C901
                     )
                     chart_figures.append(Figure(monthly_dict))
                 except Exception as e:
-                    logger.warning(
-                        "Falha ao interpretar gráfico mensal do relatório: %s", e
-                    )
+                    logger.warning("Failed to parse monthly chart from report: %s", e)
                     chart_warnings.add(
                         "Gráfico do relatório não pôde ser interpretado."
                     )

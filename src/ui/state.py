@@ -36,7 +36,7 @@ def get_elt_running_status() -> bool:
                 set_elt_running_status(False)
                 return False
         except (ValueError, TypeError) as e:
-            logger.warning("started_at inválido em elt_status: %s", e)
+            logger.warning("Invalid started_at in elt_status: %s", e)
 
     return True
 

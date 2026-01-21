@@ -5,6 +5,7 @@ from dash import Input, Output, State, callback_context
 from dash.exceptions import PreventUpdate
 
 from common.config import SPINNER_CLASS_HIDDEN, SPINNER_CLASS_VISIBLE
+from common.logging import logger
 from elt.errors import ELTError
 from elt.pipeline import run_incremental_elt
 from ui.state import get_elt_running_status, set_elt_running_status
@@ -69,6 +70,7 @@ def _register_start_pipeline_callback(app: dash.Dash) -> None:
             extraction_date = _run_elt()
             return {"running": False, "result": extraction_date}
         except Exception as e:
+            logger.warning("ELT pipeline failed: %s", e)
             return {"running": False, "result": f"Erro: {str(e)}"}
         finally:
             set_elt_running_status(False)
@@ -105,14 +107,16 @@ def _register_button_state_callback(app: dash.Dash) -> None:
                     if server_running:
                         return True, SPINNER_CLASS_VISIBLE, "Atualizando...", False
                     return False, SPINNER_CLASS_HIDDEN, "Atualizar Dados", True
-                except Exception:
+                except Exception as e:
+                    logger.warning("Failed to get ELT status: %s", e)
                     return False, SPINNER_CLASS_HIDDEN, "Atualizar Dados", True
             if triggered_id == "update-data-button.n_clicks" and (_n_clicks or 0) >= 1:
                 return True, SPINNER_CLASS_VISIBLE, "Atualizando...", False
 
         try:
             server_running = get_elt_running_status()
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to get ELT status: %s", e)
             server_running = bool(status_data and status_data.get("running"))
 
         if server_running:
@@ -156,4 +160,5 @@ def _run_elt() -> str:
     except ELTError as e:
         return f"Erro em [{e.stage}]: {e.message}"
     except Exception as e:
+        logger.warning("Error running ELT: %s", e)
         return f"Erro: {str(e)}"

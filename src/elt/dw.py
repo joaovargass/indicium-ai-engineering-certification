@@ -11,6 +11,7 @@ from common.config import (
     DW_MAX_ROWS,
     DW_UPLOAD_CHUNK_SIZE,
     FILE_SYSTEM_NAME,
+    ODBC_DRIVER_SQL_SERVER,
     PRIMARY_KEY_FIELD,
     STORAGE_ACCOUNT_NAME,
     TEMP_DIR,
@@ -29,17 +30,18 @@ def _get_sql_connection() -> tuple[str, str, str]:
     if not server or not db:
         raise ValueError("Azure SQL connection variables not set")
 
+    driver = ODBC_DRIVER_SQL_SERVER.replace(" ", "+")
     if user and password:
         conn_str = (
             f"mssql+pyodbc://{quote_plus(user)}:{quote_plus(password)}@{server}/"
             f"{quote_plus(db)}?"
-            f"driver=ODBC+Driver+18+for+SQL+Server&"
+            f"driver={driver}&"
             f"Encrypt=yes&TrustServerCertificate=no&AutoCommit=Yes"
         )
     else:
         conn_str = (
             f"mssql+pyodbc://{server}/{quote_plus(db)}?"
-            f"driver=ODBC+Driver+18+for+SQL+Server&"
+            f"driver={driver}&"
             f"Authentication=ActiveDirectoryDefault&"
             f"Encrypt=yes&TrustServerCertificate=no&AutoCommit=Yes"
         )

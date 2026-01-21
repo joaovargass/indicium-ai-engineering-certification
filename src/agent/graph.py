@@ -28,6 +28,7 @@ from common.config import (
     AGENT_TOOL_STEP_DELAY_SECONDS,
     DEFAULT_MODEL_NAME,
     DEFAULT_TEMPERATURE,
+    OPENAI_MODEL,
     TOOL_STEP_MAPPING,
 )
 from common.logging import logger
@@ -154,8 +155,10 @@ def _execute_tool(tool: object, tool_args: dict, tool_id: str) -> ToolMessage:
             content = str(result)
         return ToolMessage(content=content, tool_call_id=tool_id)
     except (ValueError, KeyError, TypeError) as e:
+        logger.warning("Tool invocation failed: %s", e)
         return ToolMessage(content=f"Erro: {e}", tool_call_id=tool_id)
     except Exception as e:
+        logger.warning("Tool invocation failed: %s", e)
         return ToolMessage(content=f"Erro: {e}", tool_call_id=tool_id)
 
 
@@ -241,6 +244,7 @@ def create_agent_graph(
         Compiled StateGraph ready to use
 
     """
+    model_name = OPENAI_MODEL or model_name
     llm = ChatOpenAI(model=model_name, temperature=temperature)
     agent = create_agent_node(llm)
 
