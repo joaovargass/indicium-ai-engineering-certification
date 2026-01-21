@@ -13,6 +13,7 @@ from common.config import (
     CNES_LEITOS_URL_TEMPLATE,
     FALLBACK_BRAZIL_TOTAL,
     FALLBACK_ICU_BEDS,
+    FALLBACK_ICU_BEDS_COMPETENCY,
     IBGE_STATE_TO_UF,
     ICU_BEDS_CACHE_PATH,
     ICU_BEDS_CACHE_TTL_DAYS,
@@ -190,7 +191,7 @@ def get_icu_beds_data(
         return api_data
 
     return {
-        "competency": 202412,
+        "competency": FALLBACK_ICU_BEDS_COMPETENCY,
         "icu_beds_by_uf": FALLBACK_ICU_BEDS.copy(),
         "icu_beds_by_city": {},
         "brazil_total": FALLBACK_BRAZIL_TOTAL,

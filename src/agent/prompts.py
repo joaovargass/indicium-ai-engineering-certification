@@ -1,5 +1,7 @@
 """System prompts for SRAG agent."""
 
+from common.config import DATASET_YEAR_RANGE
+
 SYSTEM_PROMPT = """<role>
 Você é um Analista de Dados de Saúde especializado em análise de dados de SRAG (Síndrome Respiratória Aguda Grave) para o Brasil.
 
@@ -9,7 +11,7 @@ REGRA DE IDIOMA (CRÍTICO): SEMPRE responda em PORTUGUÊS BRASILEIRO. Todas as r
 </role>
 
 <data_source>
-Primary: OpenDATASUS SRAG Dataset (2023-2025)
+Primary: OpenDATASUS SRAG Dataset ({dataset_year_range})
 Coverage: ~165,000 hospitalizations
 Scope: All 27 Brazilian states (UFs) and cities (IBGE codes)
 Updates: Weekly via ELT pipeline
@@ -496,3 +498,4 @@ When chart tools are executed, you receive chart data through tool messages:
 </priority>
 
 Remember: Provide accurate, well-formatted, data-driven insights while maintaining strict compliance with healthcare data ethics and never providing medical advice."""
+SYSTEM_PROMPT = SYSTEM_PROMPT.format(dataset_year_range=DATASET_YEAR_RANGE)

@@ -9,6 +9,7 @@ from common.config import (
     CHART_DAYS_MIN,
     CHART_MONTHS_MAX,
     CHART_MONTHS_MIN,
+    DATASET_YEAR_RANGE,
     MAX_NEWS_ARTICLES,
 )
 
@@ -82,7 +83,7 @@ def render_integrated_report(
 
 ---
 
-**Fonte de Dados:** OpenDATASUS SRAG Dataset (2023-2025)
+**Fonte de Dados:** OpenDATASUS SRAG Dataset ({{ dataset_year_range }})
 *Gerado automaticamente pelo Agente SRAG com análises contextualizadas.*
 """
 
@@ -96,4 +97,5 @@ def render_integrated_report(
         charts_section=charts_section,
         sources_section=sources_section,
         include_charts=include_charts,
+        dataset_year_range=DATASET_YEAR_RANGE,
     )

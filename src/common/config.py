@@ -1,6 +1,7 @@
 """Configuration constants for SRAG data processing."""
 
 import os
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -80,6 +81,8 @@ FALLBACK_ICU_BEDS = {
     "RR": 105,
 }
 FALLBACK_BRAZIL_TOTAL = 63401
+# Competency (YYYYMM) for fallback when CNES API and cache unavailable
+FALLBACK_ICU_BEDS_COMPETENCY = 202412
 
 # Mapping from IBGE state code (first 2 digits) to UF
 IBGE_STATE_TO_UF = {
@@ -242,9 +245,11 @@ DW_STATE_PATH = "clean/dw_state.json"
 # Data source configuration
 BASE_DOWNLOAD_URL = "https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SRAG"
 OPENDATASUS_URL = "https://dadosabertos.saude.gov.br/dataset/srag-2021-a-2024"
-
-# Start year for data collection
+# Start year for data collection (ELT and display)
 START_YEAR = 2023
+
+# Year range for prompts and report footer; derived from START_YEAR and current year
+DATASET_YEAR_RANGE = f"{START_YEAR}-{datetime.now().year}"
 
 # COVID vaccination era start (for data validation)
 COVID_VACCINATION_START_DATE = "2021-01-01"
