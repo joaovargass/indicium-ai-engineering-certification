@@ -5,7 +5,6 @@ from typing import Any
 
 from tavily import TavilyClient
 
-from common.logging import logger
 from common.config import (
     BRAZILIAN_STATES,
     HEALTH_KEYWORDS_EN,
@@ -14,6 +13,7 @@ from common.config import (
     NEWS_API_MAX_RESULTS,
     STATE_NAME_PATTERNS,
 )
+from common.logging import logger
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 

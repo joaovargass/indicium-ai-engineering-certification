@@ -98,14 +98,24 @@ def build_extraction_and_vivo_children(extraction_display: str) -> list:
     """Build [P(extraction), P(vivo)?] for last-extraction-date Div. Vivo only when extraction is valid."""
     cls = "text-muted small mb-0"
     if not extraction_display or not extraction_display.startswith("Última extração:"):
-        return [html.P(extraction_display or "Carregando…", className=f"{cls} last-extraction-date")]
+        return [
+            html.P(
+                extraction_display or "Carregando…",
+                className=f"{cls} last-extraction-date",
+            )
+        ]
     parts = [html.P(extraction_display, className=f"{cls} last-extraction-date")]
     try:
         from elt.state import get_last_live_date
 
         vivo_fmt = format_vivo_date(get_last_live_date())
         if vivo_fmt:
-            parts.append(html.P(f"Data da fonte (vivo): {vivo_fmt}", className=f"{cls} last-extraction-date"))
+            parts.append(
+                html.P(
+                    f"Data da fonte (vivo): {vivo_fmt}",
+                    className=f"{cls} last-extraction-date",
+                )
+            )
     except Exception:
         pass
     return parts

@@ -14,8 +14,8 @@ Used by response_parsing.py to render charts from tool outputs.
 import pandas as pd
 from plotly.graph_objects import Figure
 
-from common.logging import logger
 from common.config import DEFAULT_DAYS, DEFAULT_MONTHS
+from common.logging import logger
 from elt.load import load_srag_data
 from tools.location_utils import determine_location_filter
 from ui.chart_data import (

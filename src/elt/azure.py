@@ -8,13 +8,13 @@ from azure.core.exceptions import ResourceNotFoundError
 from azure.identity import DefaultAzureCredential
 from azure.storage.filedatalake import DataLakeServiceClient, FileSystemClient
 
-from common.logging import logger
 from common.config import (
     CONNECTION_TIMEOUT_SECONDS,
     FILE_SYSTEM_NAME,
     READ_TIMEOUT_SECONDS,
     STORAGE_ACCOUNT_NAME,
 )
+from common.logging import logger
 
 
 def get_client() -> FileSystemClient:

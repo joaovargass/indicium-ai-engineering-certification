@@ -6,7 +6,6 @@ from urllib.parse import quote_plus
 
 import pandas as pd
 
-from common.logging import logger
 from common.config import (
     DW_FULLY_QUALIFIED_TABLE,
     DW_MAX_ROWS,
@@ -16,6 +15,7 @@ from common.config import (
     STORAGE_ACCOUNT_NAME,
     TEMP_DIR,
 )
+from common.logging import logger
 from elt.azure import _delete_directory, _upload_parquet, get_client
 
 
@@ -276,7 +276,9 @@ def _copy_into_dw(
 
     conn_str, server, db = _get_sql_connection()
     logger.info(f"Connecting to {server}/{db}")
-    logger.info(f"COPY INTO: Loading {len(df):,} rows to {schema}.{tbl} ({if_exists} mode)")
+    logger.info(
+        f"COPY INTO: Loading {len(df):,} rows to {schema}.{tbl} ({if_exists} mode)"
+    )
 
     client = get_client()
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -315,6 +317,7 @@ def trim_dw_to_max_rows(
 ) -> None:
     """
     Delete oldest rows (by NU_NOTIFIC) when table count exceeds max_rows.
+
     Keeps the most recent ~8M rows to cap storage and cost.
     """
     if max_rows is None:

@@ -70,11 +70,29 @@ def handle_download_click(
             break
 
     if not report_file_path:
-        return (None, [dbc.Alert("Nenhum relatório encontrado nesta conversa.", color="warning", dismissable=True)])
+        return (
+            None,
+            [
+                dbc.Alert(
+                    "Nenhum relatório encontrado nesta conversa.",
+                    color="warning",
+                    dismissable=True,
+                )
+            ],
+        )
 
     report_path = Path(report_file_path)
     if not report_path.exists():
-        return (None, [dbc.Alert("Arquivo do relatório não encontrado.", color="warning", dismissable=True)])
+        return (
+            None,
+            [
+                dbc.Alert(
+                    "Arquivo do relatório não encontrado.",
+                    color="warning",
+                    dismissable=True,
+                )
+            ],
+        )
 
     try:
         if report_path.suffix == ".zip":
@@ -94,4 +112,11 @@ def handle_download_click(
             content = f.read()
         return ({"content": content, "filename": report_path.name}, [])
     except Exception as e:
-        return (None, [dbc.Alert(f"Erro ao ler o arquivo: {e}.", color="danger", dismissable=True)])
+        return (
+            None,
+            [
+                dbc.Alert(
+                    f"Erro ao ler o arquivo: {e}.", color="danger", dismissable=True
+                )
+            ],
+        )

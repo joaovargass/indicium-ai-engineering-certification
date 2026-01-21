@@ -5,8 +5,8 @@ from typing import Any
 
 import pandas as pd
 
-from common.logging import logger
 from common.config import DEFAULT_LOOKBACK_DAYS
+from common.logging import logger
 
 
 def _filter_by_location(
@@ -306,10 +306,16 @@ def _calculate_icu_period(
     reference_date: pd.Timestamp | None = None,
 ) -> tuple[pd.Timestamp, pd.Timestamp, bool]:
     """
+    Compute period_end and period_start for ICU occupancy.
+
     period_end = min(max(DT_ENTUTI), reference_date or today); period_start = period_end - (lookback_days - 1).
     reference_date is always the data vivo when available; otherwise max date in the dataset; if missing, today.
     """
-    ref = (reference_date.normalize() if reference_date is not None else pd.Timestamp.now().normalize())
+    ref = (
+        reference_date.normalize()
+        if reference_date is not None
+        else pd.Timestamp.now().normalize()
+    )
 
     if len(icu_patients) > 0 and "DT_ENTUTI" in icu_patients.columns:
         valid_entry_dates = icu_patients["DT_ENTUTI"].dropna()
@@ -320,20 +326,49 @@ def _calculate_icu_period(
         period_end = min(data_max_date, ref)
 
         period_start = period_end - timedelta(days=lookback_days - 1)
-        
+
         # Check if we have enough data for the full period
         data_min_date = valid_entry_dates.min().normalize()
         period_limited = period_start < data_min_date
-        
+
         # If period starts before available data, adjust to available data
         # but mark as limited
         if period_limited:
             period_start = data_min_date
-        
+
         return period_start, period_end, period_limited
 
     # Fallback: if no data, return minimum timestamps
     return pd.Timestamp.min, pd.Timestamp.min, False
+
+
+def _filter_icu_patients_for_period(
+    icu_patients: pd.DataFrame,
+    period_start: pd.Timestamp,
+    period_end: pd.Timestamp,
+) -> pd.DataFrame:
+    """
+    Filter to patients relevant for the period: DT_ENTUTI <= period_end.
+
+    When DT_SAIDUTI exists: open records (null exit) only if DT_ENTUTI within 180 days
+    of period_end; otherwise require DT_SAIDUTI >= period_start. When DT_SAIDUTI
+    is missing, require DT_ENTUTI >= cut (180 days before period_end).
+    """
+    has_entry_date = icu_patients["DT_ENTUTI"].notna()
+    entered_by_period_end = has_entry_date & (icu_patients["DT_ENTUTI"] <= period_end)
+    cut = period_end - timedelta(days=180)
+
+    if "DT_SAIDUTI" in icu_patients.columns:
+        open_recent = icu_patients["DT_SAIDUTI"].isna() & (
+            icu_patients["DT_ENTUTI"] >= cut
+        )
+        has_exit_after_start = icu_patients["DT_SAIDUTI"].notna() & (
+            icu_patients["DT_SAIDUTI"] >= period_start
+        )
+        return icu_patients[
+            entered_by_period_end & (open_recent | has_exit_after_start)
+        ]
+    return icu_patients[entered_by_period_end & (icu_patients["DT_ENTUTI"] >= cut)]
 
 
 def _filter_current_icu_patients(
@@ -343,13 +378,13 @@ def _filter_current_icu_patients(
     # Ensure DT_ENTUTI is not null
     has_entry_date = icu_patients["DT_ENTUTI"].notna()
     entered_by_period_end = has_entry_date & (icu_patients["DT_ENTUTI"] <= period_end)
-    
+
     if "DT_SAIDUTI" in icu_patients.columns:
         # Patients who haven't left yet (or don't have exit date)
         # Use explicit null check to avoid issues with boolean operations
-        not_left = (
-            icu_patients["DT_SAIDUTI"].isna() | 
-            (icu_patients["DT_SAIDUTI"].notna() & (icu_patients["DT_SAIDUTI"] > period_end))
+        not_left = icu_patients["DT_SAIDUTI"].isna() | (
+            icu_patients["DT_SAIDUTI"].notna()
+            & (icu_patients["DT_SAIDUTI"] > period_end)
         )
         return icu_patients[entered_by_period_end & not_left]
 
@@ -362,54 +397,55 @@ def _calculate_patient_days(
 ) -> int:
     """
     Calculate total patient-days for ICU occupancy rate.
-    
+
     For each day in the period, counts patients who were in ICU on that day:
     - DT_ENTUTI <= day (entered on or before this day)
     - DT_SAIDUTI >= day OR DT_SAIDUTI is null (including discharge day)
-    
+
     This is the standard formula: Σ Pacientes-dia
-    
+
     Args:
         icu_patients: DataFrame with ICU patients (must have DT_ENTUTI, already filtered for non-null)
         period_start: Start date of period (inclusive)
         period_end: End date of period (inclusive)
-    
+
     Returns:
         Total patient-days (sum of patients in ICU for each day).
+
     """
     if len(icu_patients) == 0:
         return 0
-    
+
     # Ensure DT_ENTUTI is not null (should already be filtered, but double-check)
     has_entry_date = icu_patients["DT_ENTUTI"].notna()
     if not has_entry_date.any():
         return 0
-    
+
     # Generate all days in the period
-    period_days = pd.date_range(start=period_start, end=period_end, freq='D')
-    
+    period_days = pd.date_range(start=period_start, end=period_end, freq="D")
+
     total_patient_days = 0
-    
+
     for day in period_days:
         day_normalized = day.normalize()
-        
+
         # Patients who entered ICU on or before this day
         entered_by_day = has_entry_date & (icu_patients["DT_ENTUTI"] <= day_normalized)
-        
+
         # Patients who haven't left yet (or don't have exit date)
         if "DT_SAIDUTI" in icu_patients.columns:
             # Use explicit null check to avoid issues with boolean operations
-            not_left = (
-                icu_patients["DT_SAIDUTI"].isna() | 
-                (icu_patients["DT_SAIDUTI"].notna() & (icu_patients["DT_SAIDUTI"] >= day_normalized))
+            not_left = icu_patients["DT_SAIDUTI"].isna() | (
+                icu_patients["DT_SAIDUTI"].notna()
+                & (icu_patients["DT_SAIDUTI"] >= day_normalized)
             )
             patients_in_icu_today = (entered_by_day & not_left).sum()
         else:
             # If no exit date column, count all who entered by this day
             patients_in_icu_today = entered_by_day.sum()
-        
+
         total_patient_days += patients_in_icu_today
-    
+
     return int(total_patient_days)
 
 
@@ -441,6 +477,33 @@ def _build_icu_metadata(
     return metadata
 
 
+def _resolve_icu_reference_date(df: pd.DataFrame) -> tuple[pd.Timestamp, int]:
+    """
+    Resolve reference date for ICU period: live date, max in df, or today.
+
+    Returns (ref_date, reference_year). Logs a warning when using today as fallback.
+    """
+    ref_date = None
+    try:
+        from elt.state import get_last_live_date
+
+        live = get_last_live_date()
+        if live:
+            parsed = pd.to_datetime(live, format="%d-%m-%Y", errors="coerce")
+            if not pd.isna(parsed):
+                ref_date = parsed.normalize()
+    except Exception:
+        pass
+    if ref_date is None:
+        ref_date = _max_date_from_df(df)
+    if ref_date is None:
+        ref_date = pd.Timestamp.now().normalize()
+        logger.warning(
+            "get_last_live_date and max date from data unavailable; using today for ICU reference."
+        )
+    return (ref_date, int(ref_date.year))
+
+
 def calculate_icu_occupancy_rate(
     df: pd.DataFrame,
     location_col: str | None = None,
@@ -450,14 +513,14 @@ def calculate_icu_occupancy_rate(
 ) -> dict[str, Any]:
     """
     Calculate ICU occupancy rate using standard formula.
-    
+
     Uses the standard health authority formula:
     Taxa de Ocupação = (Σ Pacientes-dia / Σ Leitos-dia operacionais) × 100
-    
+
     Where:
     - Pacientes-dia: Sum of patients in ICU each day (midnight census)
     - Leitos-dia operacionais: Sum of operational beds available each day
-    
+
     Args:
         df: DataFrame with case data
         location_col: Optional location column name for filtering
@@ -478,24 +541,7 @@ def calculate_icu_occupancy_rate(
     """
     df = _filter_by_location(df, location_col, location_value)
 
-    ref_date = None
-    try:
-        from elt.state import get_last_live_date
-        live = get_last_live_date()
-        if live:
-            parsed = pd.to_datetime(live, format="%d-%m-%Y", errors="coerce")
-            if not pd.isna(parsed):
-                ref_date = parsed.normalize()
-    except Exception:
-        pass
-    if ref_date is None:
-        ref_date = _max_date_from_df(df)
-    if ref_date is None:
-        ref_date = pd.Timestamp.now().normalize()
-        logger.warning(
-            "get_last_live_date and max date from data unavailable; using today for ICU reference."
-        )
-    reference_year = int(ref_date.year)
+    ref_date, reference_year = _resolve_icu_reference_date(df)
 
     required_cols = ["UTI", "DT_ENTUTI"]
     missing_cols = [col for col in required_cols if col not in df.columns]
@@ -530,7 +576,7 @@ def calculate_icu_occupancy_rate(
     period_start, period_end, period_limited = _calculate_icu_period(
         icu_patients, lookback_days, reference_date=ref_date
     )
-    
+
     # Safety check: if period is invalid, return error
     if period_start == pd.Timestamp.min or period_end == pd.Timestamp.min:
         return {
@@ -540,26 +586,20 @@ def calculate_icu_occupancy_rate(
             "patient_days": 0,
             "bed_days": None,
             "data_source": None,
-            "metadata": {"error": "Invalid period dates - unable to calculate ICU occupancy"},
+            "metadata": {
+                "error": "Invalid period dates - unable to calculate ICU occupancy"
+            },
         }
-    
-    # Filter: DT_ENTUTI <= period_end; when DT_SAIDUTI is null, only if DT_ENTUTI within 180 days of period_end (avoids old open records)
-    has_entry_date = icu_patients["DT_ENTUTI"].notna()
-    entered_by_period_end = has_entry_date & (icu_patients["DT_ENTUTI"] <= period_end)
-    cut = period_end - timedelta(days=180)
 
-    if "DT_SAIDUTI" in icu_patients.columns:
-        open_recent = icu_patients["DT_SAIDUTI"].isna() & (icu_patients["DT_ENTUTI"] >= cut)
-        has_exit_after_start = icu_patients["DT_SAIDUTI"].notna() & (icu_patients["DT_SAIDUTI"] >= period_start)
-        icu_patients_for_period = icu_patients[entered_by_period_end & (open_recent | has_exit_after_start)]
-    else:
-        icu_patients_for_period = icu_patients[entered_by_period_end & (icu_patients["DT_ENTUTI"] >= cut)]
-    
+    icu_patients_for_period = _filter_icu_patients_for_period(
+        icu_patients, period_start, period_end
+    )
+
     # Calculate patient-days (standard formula: Σ Pacientes-dia)
     total_patient_days = _calculate_patient_days(
         icu_patients_for_period, period_start, period_end
     )
-    
+
     # Get snapshot count for reference (patients currently in ICU at period_end)
     currently_in_icu = _filter_current_icu_patients(
         icu_patients_for_period, period_start, period_end
@@ -589,7 +629,7 @@ def calculate_icu_occupancy_rate(
         # Calculate bed-days (Σ Leitos-dia operacionais)
         period_days_count = (period_end - period_start).days + 1
         total_bed_days = total_icu_beds * period_days_count
-        
+
         # Standard formula: (Σ Pacientes-dia / Σ Leitos-dia) × 100
         occupancy_rate = (total_patient_days / total_bed_days) * 100
 

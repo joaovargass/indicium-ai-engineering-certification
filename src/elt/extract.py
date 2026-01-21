@@ -1,4 +1,5 @@
-"""Data extraction: fetch dates from OpenDataSUS, download frozen (Parquet) and live (CSV) SRAG files.
+"""
+Data extraction: fetch dates from OpenDataSUS, download frozen (Parquet) and live (CSV) SRAG files.
 
 URLs built via build_srag_url. Dates parsed from page text (e.g. "2025- Banco vivo 22/12/2025 - CSV");
 live_year is taken from the year prefix to handle boundary cases (e.g. Jan 2026 when latest is Dec 2025).
@@ -12,7 +13,6 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-from common.logging import logger
 from common.config import (
     BASE_DOWNLOAD_URL,
     DOWNLOAD_ENABLED,
@@ -21,11 +21,13 @@ from common.config import (
     REQUEST_TIMEOUT_SECONDS,
     START_YEAR,
 )
+from common.logging import logger
 from elt.errors import ELTError
 
 
 def build_srag_url(year: int, date_str: str, kind: str) -> str:
-    """Build SRAG data URL.
+    """
+    Build SRAG data URL.
 
     Args:
         year: Data year (e.g., 2024)
@@ -76,9 +78,7 @@ def get_dates(
                         logger.info(f"Found freeze date: {freeze_date_str}")
 
                 is_vivo = (
-                    "vivo" in text_lower
-                    and "csv" in text_lower
-                    and not live_date_str
+                    "vivo" in text_lower and "csv" in text_lower and not live_date_str
                 )
                 if is_vivo:
                     live_date_str = date_formatted
@@ -190,7 +190,9 @@ def _cleanup_local_live_files(year_dir: Path, year: int) -> None:
     """Remove local CSV files when a year transitions to frozen."""
     csv_files = list(year_dir.glob("*.csv"))
     if csv_files:
-        logger.info(f"Year {year} transitioning: removing {len(csv_files)} local CSV file(s)")
+        logger.info(
+            f"Year {year} transitioning: removing {len(csv_files)} local CSV file(s)"
+        )
         for csv_file in csv_files:
             csv_file.unlink()
             logger.debug(f"  Deleted: {csv_file.name}")
@@ -221,7 +223,8 @@ def download_frozen(
             except Exception as e:
                 raise ELTError("extracao", f"Falha ao ler congelado {year}: {e}") from e
         raise ELTError(
-            "extracao", f"Download desabilitado e arquivo local ausente para congelado {year}."
+            "extracao",
+            f"Download desabilitado e arquivo local ausente para congelado {year}.",
         )
 
     existing = list(year_dir.glob("*.parquet"))
@@ -270,6 +273,7 @@ def download_live(
 
     Returns:
         Tuple of (DataFrame or None, is_new_data: bool)
+
     """
     year_from_date = _year_from_date_str(live_date_str)
     year_dir = data_dir / str(year_from_date)
@@ -298,7 +302,8 @@ def download_live(
             logger.info(f"Using local CSV for {year_from_date}: {csv_files[0].name}")
             return read_csv(csv_files[0]), True
         raise ELTError(
-            "extracao", f"Download desabilitado e arquivo local ausente para vivo {year_from_date}."
+            "extracao",
+            f"Download desabilitado e arquivo local ausente para vivo {year_from_date}.",
         )
 
     for old_csv in year_dir.glob("*.csv"):
@@ -313,7 +318,9 @@ def download_live(
         try:
             return read_csv(file_path), True
         except Exception as e:
-            raise ELTError("extracao", f"Falha ao ler vivo {year_from_date}: {e}") from e
+            raise ELTError(
+                "extracao", f"Falha ao ler vivo {year_from_date}: {e}"
+            ) from e
 
     return None, False
 
@@ -324,7 +331,8 @@ def fetch_web_dates(
     years: list[int],
     current_year: int,
 ) -> tuple[str | None, str | None, int | None]:
-    """Fetch dates from OpenDataSUS website.
+    """
+    Fetch dates from OpenDataSUS website.
 
     Raises ELTError when required dates cannot be obtained.
     """

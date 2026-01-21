@@ -15,7 +15,8 @@ def setup_logging(
     log_to_file: bool = True,
     log_to_console: bool = True,
 ) -> None:
-    """Configure loguru for the application.
+    """
+    Configure loguru for the application.
 
     Args:
         level: Minimum log level (DEBUG, INFO, WARNING, ERROR)

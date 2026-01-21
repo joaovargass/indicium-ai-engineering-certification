@@ -8,7 +8,11 @@ from common.config import SPINNER_CLASS_HIDDEN, SPINNER_CLASS_VISIBLE
 from elt.errors import ELTError
 from elt.pipeline import run_incremental_elt
 from ui.state import get_elt_running_status, set_elt_running_status
-from ui.utils import build_extraction_and_vivo_children, format_extraction_date, load_extraction_date
+from ui.utils import (
+    build_extraction_and_vivo_children,
+    format_extraction_date,
+    load_extraction_date,
+)
 
 
 def register_elt_callbacks(app: dash.Dash) -> None:
@@ -44,7 +48,11 @@ def _register_start_pipeline_callback(app: dash.Dash) -> None:
         background=True,
         running=[
             (Output("update-data-button", "disabled"), True, False),
-            (Output("update-button-spinner", "spinner_class_name"), SPINNER_CLASS_VISIBLE, SPINNER_CLASS_HIDDEN),
+            (
+                Output("update-button-spinner", "spinner_class_name"),
+                SPINNER_CLASS_VISIBLE,
+                SPINNER_CLASS_HIDDEN,
+            ),
             (Output("elt-status-check-interval", "disabled"), False, True),
         ],
         prevent_initial_call=True,

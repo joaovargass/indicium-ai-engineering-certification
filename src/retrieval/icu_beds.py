@@ -8,7 +8,6 @@ from io import StringIO
 import pandas as pd
 import requests
 
-from common.logging import logger
 from common.config import (
     CACHE_DIR,
     CNES_LEITOS_URL_TEMPLATE,
@@ -19,6 +18,7 @@ from common.config import (
     ICU_BEDS_CACHE_TTL_DAYS,
     ICU_BEDS_REQUEST_TIMEOUT_SECONDS,
 )
+from common.logging import logger
 
 
 def _normalize_city_name(name: str) -> str:
@@ -166,9 +166,7 @@ def get_icu_beds_data(
 
     """
     now_year = datetime.now().year
-    year = (
-        min(reference_year, now_year) if reference_year is not None else now_year
-    )
+    year = min(reference_year, now_year) if reference_year is not None else now_year
 
     if not force_refresh:
         cache = _load_cache()

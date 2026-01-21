@@ -5,8 +5,8 @@ import concurrent.futures
 import diskcache
 from azure.storage.filedatalake import FileSystemClient
 
-from common.logging import logger
 from common.config import DW_STATE_PATH, ELT_STATUS_CACHE_DIR, RAW_STATE_PATH
+from common.logging import logger
 from elt.azure import _read_json, _write_json, get_client
 
 _EXTRACTION_DATE_CACHE = diskcache.Cache(str(ELT_STATUS_CACHE_DIR))

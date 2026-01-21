@@ -24,8 +24,8 @@ from pathlib import Path
 import pandas as pd
 from azure.storage.filedatalake import FileSystemClient
 
-from common.logging import logger
 from common.config import PRIMARY_KEY_FIELD, RAW_DELTAS_DIR
+from common.logging import logger
 from elt.azure import _delete_file, _download_parquet, _upload_parquet
 from elt.state import load_dw_state, load_raw_state, save_dw_state
 
@@ -97,7 +97,9 @@ def _cleanup_live_deltas(
             f for f in dw_state["processed_deltas"] if f not in live_filenames
         ]
         save_dw_state(client, dw_state)
-        logger.info(f"  Cleaned up DW state (removed {len(live_filenames)} old entries)")
+        logger.info(
+            f"  Cleaned up DW state (removed {len(live_filenames)} old entries)"
+        )
 
     return raw_state, any_live_processed
 

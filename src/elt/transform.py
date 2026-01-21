@@ -2,7 +2,6 @@
 
 import pandas as pd
 
-from common.logging import logger
 from common.config import (
     CATEGORICAL_VALIDATIONS,
     COVID_VACCINATION_START_DATE,
@@ -14,6 +13,7 @@ from common.config import (
     NULL_STRINGS,
     PRIMARY_KEY_FIELD,
 )
+from common.logging import logger
 
 
 def _get_string_cols(df: pd.DataFrame) -> list[str]:
@@ -257,7 +257,9 @@ def remove_invalid(df: pd.DataFrame) -> pd.DataFrame:
 
     total = initial - len(df)
     if total > 0:
-        logger.info(f"Removed {total:,} ({removed_pk:,} no PK, {removed_null:,} all null)")
+        logger.info(
+            f"Removed {total:,} ({removed_pk:,} no PK, {removed_null:,} all null)"
+        )
 
     return df
 

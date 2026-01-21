@@ -4,8 +4,8 @@ from datetime import datetime
 
 import diskcache
 
-from common.logging import logger
 from common.config import ELT_STATUS_CACHE_DIR, ELT_STATUS_TIMEOUT_SECONDS
+from common.logging import logger
 
 # Initialize server-side cache
 ELT_STATUS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -30,7 +30,9 @@ def get_elt_running_status() -> bool:
             started_time = datetime.fromisoformat(started_at)
             elapsed = (datetime.now() - started_time).total_seconds()
             if elapsed > ELT_STATUS_TIMEOUT_SECONDS:
-                logger.warning(f"ELT status auto-reset: stuck for {elapsed / 60:.1f} minutes")
+                logger.warning(
+                    f"ELT status auto-reset: stuck for {elapsed / 60:.1f} minutes"
+                )
                 set_elt_running_status(False)
                 return False
         except (ValueError, TypeError) as e:

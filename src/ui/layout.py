@@ -46,7 +46,12 @@ def _create_title_section() -> list[html.H2 | html.P]:
         ),
         html.Div(
             id="last-extraction-date",
-            children=[html.P("Carregando…", className="text-muted small mb-0 last-extraction-date")],
+            children=[
+                html.P(
+                    "Carregando…",
+                    className="text-muted small mb-0 last-extraction-date",
+                )
+            ],
         ),
     ]
 

@@ -162,8 +162,12 @@ def _extract_tool_outputs(  # noqa: C901
                     )
                     chart_figures.append(Figure(daily_dict))
                 except Exception as e:
-                    logger.warning("Falha ao interpretar gráfico diário do relatório: %s", e)
-                    chart_warnings.add("Gráfico do relatório não pôde ser interpretado.")
+                    logger.warning(
+                        "Falha ao interpretar gráfico diário do relatório: %s", e
+                    )
+                    chart_warnings.add(
+                        "Gráfico do relatório não pôde ser interpretado."
+                    )
             if monthly_json:
                 try:
                     monthly_dict = (
@@ -173,10 +177,20 @@ def _extract_tool_outputs(  # noqa: C901
                     )
                     chart_figures.append(Figure(monthly_dict))
                 except Exception as e:
-                    logger.warning("Falha ao interpretar gráfico mensal do relatório: %s", e)
-                    chart_warnings.add("Gráfico do relatório não pôde ser interpretado.")
+                    logger.warning(
+                        "Falha ao interpretar gráfico mensal do relatório: %s", e
+                    )
+                    chart_warnings.add(
+                        "Gráfico do relatório não pôde ser interpretado."
+                    )
 
-    return chart_figures, chart_metadata, report_path, report_content, list(chart_warnings)
+    return (
+        chart_figures,
+        chart_metadata,
+        report_path,
+        report_content,
+        list(chart_warnings),
+    )
 
 
 def _build_tool_call_map(messages: list) -> dict[str, tuple[str, dict]]:

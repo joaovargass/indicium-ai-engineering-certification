@@ -9,7 +9,6 @@ import time
 import uuid
 from typing import Annotated, Callable, Literal, TypedDict
 
-from common.logging import logger
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -31,6 +30,7 @@ from common.config import (
     DEFAULT_TEMPERATURE,
     TOOL_STEP_MAPPING,
 )
+from common.logging import logger
 from tools import ALL_TOOLS
 
 
