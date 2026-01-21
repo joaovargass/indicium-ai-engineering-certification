@@ -28,16 +28,22 @@ External data retrieval module that fetches ICU bed counts from CNES API and hea
 
 **ICU Beds**:
 - Fetches from CNES CSV API: `https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/Leitos_SUS/Leitos_{year}.csv`
-- Uses latest competency period (YYYYMM) from data
-- Normalizes city names (uppercase, no accents) for matching
-- City lookup: Converts IBGE city code to city name, then normalizes for CNES matching
-- Cache serialization: Converts tuple keys `(UF, city)` to string keys for JSON
+- Uses latest competency period (YYYYMM) from data (CNES_LEITOS_COL_COMP)
+- Normalizes city names (uppercase, no accents) for matching via `_normalize_city_name()`
+- City lookup: Converts IBGE city code to city name (via `tools.location_utils.resolve_city_name()`), then normalizes for CNES matching
+- Cache serialization: Converts tuple keys `(UF, city)` to string keys for JSON (`f"{uf}|{city}"`)
+- Reference year: When `reference_year` provided (e.g. from dataset max date), uses Leitos_{year}.csv aligned to that year
+- Fallback: Uses static fallback data (FALLBACK_ICU_BEDS, Dec 2024) if API unavailable
+- Data structure: Returns dict with `competency`, `icu_beds_by_uf`, `icu_beds_by_city`, `brazil_total`, `source`
 
 **News Search**:
 - Uses Tavily API with "advanced" search depth
-- Query enhancement: Adds "Brasil" if state mentioned, adds "saúde SRAG" if no health keywords
-- Health keywords: Portuguese and English keywords from `common.config`
-- Error handling: Returns empty list on API errors or missing API key
+- Query enhancement via `_enhance_query()`: Adds "Brasil" if state mentioned, adds "saúde SRAG" if no health keywords
+- Health keywords: Portuguese and English keywords from `common.config` (HEALTH_KEYWORDS_PT, HEALTH_KEYWORDS_EN)
+- State detection: Checks if any Brazilian state code or name pattern is mentioned
+- Error handling: Returns empty list on API errors, missing API key, or empty query
+- Max results: Default 5 (MAX_NEWS_ARTICLES), up to 20 (NEWS_API_MAX_RESULTS)
+- Returns list of dicts with `title`, `url`, `content`, `date`
 
 ## Dependencies
 

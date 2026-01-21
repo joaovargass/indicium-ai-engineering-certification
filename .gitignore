@@ -230,6 +230,10 @@ cache/
 # Secrets and credentials (never commit these)
 .secrets/
 
+# Application logs
+logs/
+
+# Docs (generated)
 docs
 docs/**
 assets/**/*.png

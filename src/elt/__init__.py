@@ -10,7 +10,6 @@ from elt.deltas import (
     upload_live_delta,
 )
 from elt.dw import read_from_dw, save_to_dw
-from elt.reset import reset_all_state
 from elt.state import (
     get_extraction_date,
     load_dw_state,
@@ -42,6 +41,4 @@ __all__ = [
     # DW operations
     "read_from_dw",
     "save_to_dw",
-    # Reset
-    "reset_all_state",
 ]

@@ -10,14 +10,21 @@ import requests
 
 from common.config import (
     CACHE_DIR,
+    CNES_LEITOS_COL_COMP,
+    CNES_LEITOS_CSV_SEP,
+    CNES_LEITOS_COL_MUNICIPIO,
+    CNES_LEITOS_COL_UF,
+    CNES_LEITOS_COL_UTI,
     CNES_LEITOS_URL_TEMPLATE,
     FALLBACK_BRAZIL_TOTAL,
     FALLBACK_ICU_BEDS,
+    FALLBACK_ICU_BEDS_COMPETENCY,
     IBGE_STATE_TO_UF,
     ICU_BEDS_CACHE_PATH,
     ICU_BEDS_CACHE_TTL_DAYS,
     ICU_BEDS_REQUEST_TIMEOUT_SECONDS,
 )
+from common.logging import logger
 
 
 def _normalize_city_name(name: str) -> str:
@@ -57,7 +64,8 @@ def _load_cache() -> dict | None:
         cache["icu_beds_by_city"] = icu_beds_by_city
 
         return cache
-    except Exception:
+    except Exception as e:
+        logger.warning("Error loading ICU beds cache: %s", e)
         return None
 
 
@@ -96,33 +104,55 @@ def _fetch_from_api(year: int | None = None) -> dict | None:
 
         df = pd.read_csv(
             StringIO(response.text),
-            sep=",",
+            sep=CNES_LEITOS_CSV_SEP,
             quotechar='"',
             on_bad_lines="skip",
             dtype=str,
         )
 
-        for col in ["UTI_TOTAL_EXIST", "COMP"]:
+        for col in [CNES_LEITOS_COL_UTI, CNES_LEITOS_COL_COMP]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        latest_comp = df["COMP"].max()
-        df_latest = df[df["COMP"] == latest_comp]
+        required = [CNES_LEITOS_COL_COMP, CNES_LEITOS_COL_UTI, CNES_LEITOS_COL_UF]
+        if any(c not in df.columns for c in required):
+            logger.warning(
+                "CNES Leitos CSV missing required columns (expected %s); check CNES_LEITOS_COL_* in config.",
+                required,
+            )
+            return None
 
-        icu_by_uf = df_latest.groupby("UF")["UTI_TOTAL_EXIST"].sum().to_dict()
-        brazil_total = int(df_latest["UTI_TOTAL_EXIST"].sum())
-        icu_by_uf = {k: int(v) for k, v in icu_by_uf.items()}
-        city_beds = (
-            df_latest.groupby(["UF", "MUNICIPIO"])["UTI_TOTAL_EXIST"]
-            .sum()
-            .reset_index()
+        latest_comp = df[CNES_LEITOS_COL_COMP].max()
+        df_latest = df[df[CNES_LEITOS_COL_COMP] == latest_comp]
+
+        icu_by_uf = (
+            df_latest.groupby(CNES_LEITOS_COL_UF)[CNES_LEITOS_COL_UTI].sum().to_dict()
         )
+        brazil_total = int(df_latest[CNES_LEITOS_COL_UTI].sum())
+        icu_by_uf = {k: int(v) for k, v in icu_by_uf.items()}
+
+        if CNES_LEITOS_COL_MUNICIPIO not in df_latest.columns:
+            city_beds = pd.DataFrame(
+                columns=[
+                    CNES_LEITOS_COL_UF,
+                    CNES_LEITOS_COL_MUNICIPIO,
+                    CNES_LEITOS_COL_UTI,
+                ]
+            )
+        else:
+            city_beds = (
+                df_latest.groupby([CNES_LEITOS_COL_UF, CNES_LEITOS_COL_MUNICIPIO])[
+                    CNES_LEITOS_COL_UTI
+                ]
+                .sum()
+                .reset_index()
+            )
         icu_by_city = {}
         for _, row in city_beds.iterrows():
-            uf = row["UF"]
-            city_name = _normalize_city_name(str(row["MUNICIPIO"]))
+            uf = row[CNES_LEITOS_COL_UF]
+            city_name = _normalize_city_name(str(row[CNES_LEITOS_COL_MUNICIPIO]))
             key = (uf, city_name)
-            icu_by_city[key] = int(row["UTI_TOTAL_EXIST"])
+            icu_by_city[key] = int(row[CNES_LEITOS_COL_UTI])
 
         return {
             "competency": int(latest_comp),
@@ -133,19 +163,27 @@ def _fetch_from_api(year: int | None = None) -> dict | None:
         }
 
     except Exception as e:
-        print(f"Warning: Could not fetch ICU beds from API: {e}")
+        logger.warning(f"Could not fetch ICU beds from API: {e}")
         return None
 
 
-def get_icu_beds_data(force_refresh: bool = False) -> dict:
+def get_icu_beds_data(
+    force_refresh: bool = False,
+    reference_year: int | None = None,
+) -> dict:
     """
     Get ICU bed data by state.
 
     Uses cache if available and valid, otherwise fetches from CNES API.
     Falls back to static data if API unavailable.
+    When reference_year is given, uses Leitos_{year}.csv aligned to that year
+    (e.g. from the latest date in the ELT dataset).
 
     Args:
         force_refresh: If True, bypasses cache and fetches fresh data.
+        reference_year: Year to choose Leitos_{year}.csv. If None, uses current year.
+            Capped to datetime.now().year. If given, cache is used only when
+            cached competency year matches.
 
     Returns:
         Dictionary with:
@@ -156,30 +194,43 @@ def get_icu_beds_data(force_refresh: bool = False) -> dict:
         - source: "cache", "cnes_api", or "fallback"
 
     """
+    now_year = datetime.now().year
+    year = min(reference_year, now_year) if reference_year is not None else now_year
+
     if not force_refresh:
         cache = _load_cache()
         if cache:
-            cache["source"] = "cache"
-            return cache
+            if reference_year is not None:
+                comp = cache.get("competency") or 0
+                if (comp // 100) != reference_year:
+                    cache = None
+            if cache:
+                cache["source"] = "cache"
+                return cache
 
-    api_data = _fetch_from_api()
+    api_data = _fetch_from_api(year=year)
+    if not api_data:
+        prev = year - 1
+        logger.info(f"Leitos_{year} failed, trying Leitos_{prev}")
+        api_data = _fetch_from_api(year=prev)
+
     if api_data:
         _save_cache(api_data)
         return api_data
 
-    # Fallback to static data
     return {
-        "competency": 202412,
+        "competency": FALLBACK_ICU_BEDS_COMPETENCY,
         "icu_beds_by_uf": FALLBACK_ICU_BEDS.copy(),
         "icu_beds_by_city": {},
         "brazil_total": FALLBACK_BRAZIL_TOTAL,
-        "source": "fallback",
+        "source": f"fallback (estático, competência {FALLBACK_ICU_BEDS_COMPETENCY})",
     }
 
 
 def get_location_icu_beds(
     uf: str | None = None,
     city_code: str | None = None,
+    reference_year: int | None = None,
 ) -> tuple[int | None, str]:
     """
     Get ICU bed count for a specific location.
@@ -187,13 +238,14 @@ def get_location_icu_beds(
     Args:
         uf: State code (e.g., "SP", "RJ") or None for Brazil total.
         city_code: IBGE city code (6 digits). Converts to city name for lookup.
+        reference_year: Year for Leitos_{year}.csv (e.g. from dataset max date). If None, uses current year.
 
     Returns:
         Tuple of (bed_count, source_description).
         bed_count is None if location not found.
 
     """
-    data = get_icu_beds_data()
+    data = get_icu_beds_data(reference_year=reference_year)
     source = f"CNES {data.get('competency', 'N/A')} ({data.get('source', 'unknown')})"
 
     if city_code:

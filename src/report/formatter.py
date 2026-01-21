@@ -56,7 +56,7 @@ def format_metrics_table(metrics: dict[str, Any], news: list[dict]) -> str:
     )
     rows.append(
         {
-            "metric": "Taxa de Ocupação de UTI",
+            "metric": "Taxa de Ocupação de UTI (SRAG)",
             "value": f"{icu_rate}%" if icu_rate is not None else "N/A",
             "explanation": icu_explanation,
         }
@@ -94,7 +94,15 @@ def format_metrics_table(metrics: dict[str, Any], news: list[dict]) -> str:
             explanation = explanation[: EXPLANATION_MAX_LENGTH - 3] + "..."
         table_lines.append(f"| {row['metric']} | {row['value']} | {explanation} |")
 
-    return "\n".join(table_lines)
+    formulas = """
+### Como as métricas são calculadas
+
+- **Taxa de Aumento de Casos:** (casos no período atual − casos no período anterior) / casos no período anterior × 100. Períodos de 7 dias; os últimos 7 dias são excluídos por atraso de notificação.
+- **Taxa de Mortalidade:** óbitos (evolução para óbito) / casos com evolução conhecida × 100. Excluem-se casos com evolução ignorada.
+- **Taxa de Ocupação de UTI (SRAG):** (Σ pacientes-dia em UTI por SRAG) / (Σ leitos-dia) × 100. Apenas casos SRAG; pacientes-dia: OpenDataSUS (SRAG); leitos: CNES; fim do período limitado pela data viva da fonte.
+- **Taxas de Vacinação:** percentual de casos com vacinação COVID-19 ou gripe registrada entre os com resposta válida; excluem-se ignorados.
+"""
+    return "\n".join(table_lines) + formulas
 
 
 def format_news_section(articles: list[dict], detailed: bool = True) -> str:

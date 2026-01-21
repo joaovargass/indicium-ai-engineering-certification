@@ -3,6 +3,7 @@
 import pandas as pd
 
 from common.config import CACHE_DIR, DASH_CACHE_PATH
+from common.logging import logger
 from elt.dw import read_from_dw
 
 
@@ -25,6 +26,7 @@ def load_srag_data() -> pd.DataFrame:
     try:
         df = read_from_dw()
     except Exception as e:
+        logger.warning("Failed to load SRAG from DW: %s", e)
         raise NoDataAvailableError(
             "Dados não disponíveis. Use o botão 'Atualizar Dados' para carregar os dados do SRAG."
         ) from e

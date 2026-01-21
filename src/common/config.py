@@ -1,6 +1,7 @@
 """Configuration constants for SRAG data processing."""
 
 import os
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -10,7 +11,8 @@ load_dotenv()
 # =============================================================================
 # Path Configuration
 # =============================================================================
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(os.getenv("SRAG_PROJECT_ROOT", str(_DEFAULT_PROJECT_ROOT)))
 SRC_PATH = PROJECT_ROOT / "src"
 DATA_DIR = PROJECT_ROOT / "data"
 CACHE_DIR = DATA_DIR / "cleaned"
@@ -80,6 +82,9 @@ FALLBACK_ICU_BEDS = {
     "RR": 105,
 }
 FALLBACK_BRAZIL_TOTAL = 63401
+# Competency (YYYYMM) for fallback when CNES API and cache unavailable.
+# Static Dec 2024; review when CNES unavailable for long or data is stale.
+FALLBACK_ICU_BEDS_COMPETENCY = 202412
 
 # Mapping from IBGE state code (first 2 digits) to UF
 IBGE_STATE_TO_UF = {
@@ -170,6 +175,7 @@ REPORT_CONTENT_PREVIEW_LENGTH = 300
 # LLM Configuration
 # =============================================================================
 DEFAULT_MODEL_NAME = "gpt-5-nano"
+OPENAI_MODEL = os.getenv("OPENAI_MODEL")  # Overrides DEFAULT_MODEL_NAME when set.
 DEFAULT_TEMPERATURE = 0.0
 REPORT_TEMPERATURE = 0.3
 
@@ -188,6 +194,10 @@ TOOL_STEP_MAPPING = {
     "generate_chat_report": "Gerando relatório interativo...",
     "search_srag_news_tool": "Buscando notícias de saúde...",
 }
+
+# Delay (seconds) before each tool execution and after tool results when using step_callback
+AGENT_TOOL_STEP_DELAY_SECONDS = 1.0
+AGENT_TOOL_RESULT_DELAY_SECONDS = 0.5
 
 # =============================================================================
 # Validation Limits
@@ -211,15 +221,45 @@ NO_DATA_MESSAGE_METRICS = _NO_DATA_MESSAGE_TEMPLATE.format(action="fazer consult
 NO_DATA_MESSAGE_CHARTS = _NO_DATA_MESSAGE_TEMPLATE.format(action="gerar gráficos")
 
 # =============================================================================
-# External API URLs
+# External API URLs and source-specific settings (adjust if source changes)
 # =============================================================================
 CNES_LEITOS_URL_TEMPLATE = (
     "https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/Leitos_SUS/Leitos_{year}.csv"
 )
+# CNES Leitos CSV separator; override: CNES_LEITOS_CSV_SEP.
+CNES_LEITOS_CSV_SEP = os.getenv("CNES_LEITOS_CSV_SEP", ",")
+# CNES Leitos CSV columns; change if CNES renames them
+CNES_LEITOS_COL_COMP = "COMP"
+CNES_LEITOS_COL_UTI = "UTI_TOTAL_EXIST"
+CNES_LEITOS_COL_UF = "UF"
+CNES_LEITOS_COL_MUNICIPIO = "MUNICIPIO"
+
+# IBGE municipios API; change if endpoint or JSON keys change. Override: IBGE_MUNICIPIOS_URL.
+IBGE_MUNICIPIOS_URL = os.getenv(
+    "IBGE_MUNICIPIOS_URL",
+    "https://servicodados.ibge.gov.br/api/v1/localidades/municipios",
+)
+IBGE_MUNICIPIOS_ID_KEY = "id"
+IBGE_MUNICIPIOS_NOME_KEY = "nome"
+
+# OpenDataSUS date parsing; change if the dataset page wording/format changes
+OPENDATASUS_DATE_REGEX = r"\d{2}/\d{2}/\d{4}"
+OPENDATASUS_DATE_INPUT_FORMATS = ["%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"]
+OPENDATASUS_CONGELADO_KEYWORDS = ["congelado", "parquet"]
+OPENDATASUS_VIVO_KEYWORDS = ["vivo", "csv"]
+OPENDATASUS_YEAR_PREFIX_REGEX = r"^(\d{4})\s*-"
+
+# SRAG live CSV separator; override: SRAG_CSV_SEP.
+SRAG_CSV_SEP = os.getenv("SRAG_CSV_SEP", ";")
+# SRAG file naming on S3; change if path/prefix or extensions change
+SRAG_FILE_PREFIX = "INFLUD"
+SRAG_EXT_CONGELADO = "parquet"
+SRAG_EXT_VIVO = "csv"
 
 # =============================================================================
 # Execution Flags
 # =============================================================================
+# Default incremental; full refresh only when explicitly requested from UI (e.g. "Full refresh" checkbox)
 FULL_REFRESH = False
 DOWNLOAD_ENABLED = True
 
@@ -236,10 +276,16 @@ DW_STATE_PATH = "clean/dw_state.json"
 
 # Data source configuration
 BASE_DOWNLOAD_URL = "https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SRAG"
-OPENDATASUS_URL = "https://opendatasus.saude.gov.br/dataset/srag-2021-a-2024"
-
-# Start year for data collection
+# OpenDataSUS dataset page; override: OPENDATASUS_URL.
+OPENDATASUS_URL = os.getenv(
+    "OPENDATASUS_URL",
+    "https://dadosabertos.saude.gov.br/dataset/srag-2021-a-2024",
+)
+# Start year for data collection (ELT and display)
 START_YEAR = 2023
+
+# Year range for prompts and report footer; derived from START_YEAR and current year
+DATASET_YEAR_RANGE = f"{START_YEAR}-{datetime.now().year}"
 
 # COVID vaccination era start (for data validation)
 COVID_VACCINATION_START_DATE = "2021-01-01"
@@ -312,9 +358,16 @@ COVID_VACCINE_DATE_COLS = [
     "DOS_RE_BI",
 ]
 
+# ODBC driver for SQL Server; override via ODBC_DRIVER_SQL_SERVER if needed
+ODBC_DRIVER_SQL_SERVER = os.getenv(
+    "ODBC_DRIVER_SQL_SERVER", "ODBC+Driver+18+for+SQL+Server"
+)
+
 # Azure Data Warehouse configuration
 DW_FULLY_QUALIFIED_TABLE = "dbo.srag_cleaned"
 DW_UPLOAD_CHUNK_SIZE = 500000  # Rows per parquet file when uploading to staging
+# Cap total rows in the DW to control storage and cost (~8M lines)
+DW_MAX_ROWS = 8_000_000
 
 # Brazilian states (UF codes) - All 27 states
 BRAZILIAN_STATES = [

@@ -15,29 +15,6 @@ from charts.stats import calculate_trend, prepare_chart_data
 prepare_dataframe = prepare_chart_data
 
 
-def to_datetime(value: object) -> datetime | None:
-    """
-    Convert various date types to Python datetime.
-
-    Args:
-        value: Date value (pd.Timestamp, datetime, string, or None)
-
-    Returns:
-        Python datetime object or None if conversion fails
-
-    """
-    if value is None:
-        return None
-    if isinstance(value, pd.Timestamp):
-        return value.to_pydatetime()
-    if isinstance(value, datetime):
-        return value
-    try:
-        return pd.to_datetime(value).to_pydatetime()
-    except (ValueError, TypeError):
-        return None
-
-
 def filter_by_days(df: pd.DataFrame, date_col: str, days: int) -> pd.DataFrame:
     """
     Filter dataframe to last N days from the maximum date.

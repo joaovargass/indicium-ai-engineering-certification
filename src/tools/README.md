@@ -171,7 +171,7 @@ flowchart TD
 **`metric_tools.py`** - Metric calculation tools:
 - `get_case_increase_rate()`: Case growth rate comparing current vs previous period (default: 7 days)
 - `get_mortality_rate()`: Mortality percentage (deaths/cases, default: 12 months lookback)
-- `get_icu_occupancy_rate()`: ICU bed occupancy rate (default: 30 days lookback)
+- `get_icu_occupancy_rate()`: ICU bed occupancy rate (default: 30 days lookback). Sources: OpenDataSUS (SRAG), CNES (beds)
 - `get_vaccination_rate()`: COVID-19 and/or flu vaccination rates (default: 12 months lookback)
 - All tools support `uf` (state code) and `city_code` (IBGE code) parameters
 - Returns structured dictionaries with rates, counts, periods, and metadata
@@ -186,16 +186,24 @@ flowchart TD
 
 **`reports.py`** - Report generation tools:
 - `generate_download_report()`: Generates complete report with LLM narrative, saves to file/ZIP
-  - Fetches all 4 metrics
-  - Generates chart images (PNG) for inclusion in ZIP
-  - Uses LLM to generate integrated narrative
-  - Saves as Markdown file or ZIP (with images)
+  - Validates parameters (days: 7-90, months: 1-24, news: 0-5)
+  - Fetches all 4 metrics via metric tools
+  - Generates chart images (PNG) for inclusion in ZIP if include_charts=True
+  - Extracts chart statistics for LLM context
+  - Uses LLM to generate integrated narrative via `generate_report_body()`
+  - Renders final report using Jinja2 template
+  - Saves as Markdown file or ZIP (with images) via `save_report_to_file()` or `save_report_zip()`
   - Returns file path, size, and summary for chat display
 - `generate_chat_report()`: Generates interactive report for chat display
+  - Validates parameters
+  - Fetches all metrics and news
+  - Generates executive summary if include_executive_summary=True
+  - Formats metrics table if include_metrics=True
   - Returns Markdown text with executive summary and metrics table
-  - Includes Plotly JSON charts for inline rendering
+  - Includes Plotly JSON charts for inline rendering (via chart tools)
   - No file saving (for chat display only)
-- Both tools support parameter validation, component flags (include_metrics, include_news, include_charts)
+- Both tools support parameter validation, component flags (include_metrics, include_news, include_charts, include_executive_summary)
+- Helper functions: `_fetch_all_metrics()`, `_fetch_news()`, `_check_metrics_error()`, `_generate_chart_images()`, `_build_report_result()`
 
 **`news.py`** - News search tool:
 - `search_srag_news_tool()`: Searches health news via Tavily API
@@ -206,16 +214,18 @@ flowchart TD
 **`location_utils.py`** - Location resolution utilities:
 - `resolve_city_name()`: Converts IBGE 6-digit code to city name
   - Uses cached mapping file (`data/cleaned/city_mapping.json`)
-  - Falls back to IBGE API if cache missing
+  - Falls back to IBGE API if cache missing (IBGE_MUNICIPIOS_URL from config)
   - Caches API response for future use
+  - Handles API errors gracefully (returns None)
 - `determine_location_filter()`: Returns (column, value) tuple for DataFrame filtering
-  - Returns `("CO_MUN_NOT", city_code)` if city_code provided
-  - Returns `("SG_UF_NOT", uf)` if uf provided
+  - Returns `("CO_MUN_NOT", city_code)` if city_code provided (overrides UF)
+  - Returns `("SG_UF_NOT", uf.upper())` if uf provided
   - Returns `(None, None)` for national data
 - `get_location_description()`: Returns human-readable location string
   - "Brasil (nacional)" for national
-  - UF code for state
-  - City name for city (resolved from code)
+  - UF code (uppercase) for state
+  - City name for city (resolved from code via `resolve_city_name()`)
+  - Falls back to "Cidade código {code}" if city name not found
 
 ## Technical Details
 

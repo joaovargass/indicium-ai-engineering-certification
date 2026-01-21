@@ -77,7 +77,7 @@ def get_icu_occupancy_rate(
         int, "Days to look back (default: 30)."
     ] = DEFAULT_LOOKBACK_DAYS,
 ) -> dict[str, Any]:
-    """Calculate ICU occupancy rate. Use for hospital capacity queries."""
+    """Calculate ICU occupancy rate. Use for hospital capacity queries. Apenas casos SRAG. Taxa = pacientes-dia / leitos-dia. Fontes: OpenDataSUS (SRAG) para pacientes-dia, CNES para leitos."""
     try:
         df = load_srag_data()
     except NoDataAvailableError:

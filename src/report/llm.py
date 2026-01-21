@@ -4,7 +4,13 @@ from typing import Any
 
 from langchain_openai import ChatOpenAI
 
-from common.config import ARTICLE_PREVIEW_LENGTH, DEFAULT_MODEL_NAME, REPORT_TEMPERATURE
+from common.config import (
+    ARTICLE_PREVIEW_LENGTH,
+    DEFAULT_MODEL_NAME,
+    OPENAI_MODEL,
+    REPORT_TEMPERATURE,
+)
+from common.logging import logger
 
 # LLM instance for generating explanations (lazy initialization)
 _llm: ChatOpenAI | None = None
@@ -14,7 +20,8 @@ def _get_llm() -> ChatOpenAI:
     """Get or create LLM instance (lazy initialization)."""
     global _llm
     if _llm is None:
-        _llm = ChatOpenAI(model=DEFAULT_MODEL_NAME, temperature=REPORT_TEMPERATURE)
+        model = OPENAI_MODEL or DEFAULT_MODEL_NAME
+        _llm = ChatOpenAI(model=model, temperature=REPORT_TEMPERATURE)
     return _llm
 
 
@@ -78,7 +85,8 @@ Resumo Executivo:"""
         if content.startswith("Resumo Executivo:"):
             content = content.replace("Resumo Executivo:", "", 1).strip()
         return content
-    except Exception:
+    except Exception as e:
+        logger.warning("LLM failed to generate executive summary: %s", e)
         return f"Análise consolidada dos dados SRAG para {location}. Os dados indicam uma situação que requer monitoramento contínuo."
 
 
@@ -94,17 +102,21 @@ def _build_metric_context(
     context += f"Valor: {metric_value}\n"
 
     if metric_name == "case_increase_rate":
+        context += "Cálculo: (casos no período atual − casos no período anterior) / casos no período anterior × 100; períodos de 7 dias; últimos 7 dias excluídos por atraso de notificação.\n"
         context += (
             f"Casos no período atual: {metric_data.get('current_period_cases', 0)}\n"
         )
         context += f"Casos no período anterior: {metric_data.get('previous_period_cases', 0)}\n"
     elif metric_name == "mortality_rate":
+        context += "Cálculo: óbitos (evolução para óbito) / casos com evolução conhecida × 100; excl. evolução ignorada.\n"
         context += f"Total de óbitos: {metric_data.get('total_deaths', 0)}\n"
         context += f"Total de casos: {metric_data.get('total_cases', 0)}\n"
     elif metric_name == "icu_occupancy_rate":
-        context += f"Pacientes em UTI: {metric_data.get('patients_in_icu', 0)}\n"
-        context += f"Total de leitos: {metric_data.get('total_icu_beds', 'N/A')}\n"
+        context += "Cálculo: (Σ pacientes-dia em UTI por SRAG) / (Σ leitos-dia) × 100; apenas SRAG; pacientes-dia: OpenDataSUS (SRAG); leitos: CNES; fim do período pela data viva.\n"
+        context += f"Pacientes em UTI (fim do período): {metric_data.get('patients_in_icu', 0)}\n"
+        context += f"Leitos (CNES): {metric_data.get('total_icu_beds', 'N/A')}\n"
     elif metric_name == "vaccination_rate":
+        context += "Cálculo: % de casos com vacinação COVID-19 ou gripe (resposta válida); excl. ignorados.\n"
         context += f"Vacinação COVID-19: {metric_data.get('covid_rate', 0)}%\n"
         context += f"Vacinação Gripe: {metric_data.get('flu_rate', 0)}%\n"
 
@@ -132,14 +144,13 @@ def _check_data_outdated(period_end: str | None) -> tuple[str, str | None, str |
         period_end_str = period_end_date.strftime("%Y-%m-%d")
 
         if period_end_date < today:
-            note = f"\nIMPORTANTE: A data máxima dos dados ({period_end_str}) é anterior à data de hoje ({today_str}). Isso ocorre porque os dados são atualizados semanalmente pelas fontes. Você DEVE mencionar isso na explicação e orientar o usuário a clicar no botão de atualização para verificar se há dados mais recentes disponíveis."
+            note = f"\nData máxima dos dados ({period_end_str}) < hoje ({today_str}). Dados atualizados semanalmente; usuário pode atualizar."
             return note, today_str, period_end_str
         else:
             return "", today_str, period_end_str
-    except Exception:
+    except Exception as e:
+        logger.warning("Error checking data outdated status: %s", e)
         return "", today_str, None
-
-    return "", None, None
 
 
 def generate_metric_explanation(
@@ -158,13 +169,13 @@ def generate_metric_explanation(
         news: List of relevant news articles
 
     Returns:
-        LLM-generated explanation text (1-2 sentences)
+        LLM-generated explanation (1 sentence).
 
     """
     metric_names_pt = {
         "case_increase_rate": "Taxa de Aumento de Casos",
         "mortality_rate": "Taxa de Mortalidade",
-        "icu_occupancy_rate": "Taxa de Ocupação de UTI",
+        "icu_occupancy_rate": "Taxa de Ocupação de UTI (SRAG)",
         "vaccination_rate": "Taxa de Vacinação",
     }
 
@@ -198,18 +209,14 @@ def generate_metric_explanation(
 
     prompt = f"""Você é um analista de dados de saúde.
 
-Com base nos dados abaixo, gere uma explicação contextualizada curta (2-3 frases) em português que explique o que este valor significa no cenário atual.
+Com base nos dados abaixo, gere UMA frase em português que explique o que este valor significa.
 
 {context}{period_info}{date_info}{data_outdated_note}
 
 Instruções:
-- Explique o que o valor significa (alto, baixo, preocupante, positivo, etc.)
-- SEMPRE mencione o período analisado na explicação (e.g., "nos últimos 12 meses", "no período de 7 dias", "nos últimos 30 dias")
-- NUNCA mencione o formato de data (YYYY-MM-DD) explicitamente - apenas use datas naturalmente
-- Se a data máxima dos dados for anterior à data de hoje, SEMPRE explique que isso ocorre porque os dados são atualizados semanalmente pelas fontes e oriente o usuário a clicar no botão de atualização para verificar se há dados mais recentes disponíveis
-- Conecte às notícias se relevante
-- Seja claro e profissional
-- Máximo 2-3 frases
+- Uma única frase. Seja direto. Inclua brevemente como a métrica é calculada (use o "Cálculo" do contexto).
+- NUNCA use formato YYYY-MM-DD; use datas em português (ex: 21/01/2026).
+- Se a data máxima dos dados for anterior à data de hoje, mencione que os dados são atualizados semanalmente e que o usuário pode atualizar.
 
 Explicação:"""
 
@@ -217,5 +224,8 @@ Explicação:"""
         llm = _get_llm()
         response = llm.invoke(prompt)
         return response.content.strip()
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            "LLM failed to generate explanation for metric %s: %s", metric_name, e
+        )
         return f"Este valor indica a situação atual da {metric_name_pt.lower()} no período analisado."

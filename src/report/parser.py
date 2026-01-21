@@ -2,55 +2,26 @@
 
 from common.config import REPORT_SUMMARY_MAX_CHARS, REPORT_SUMMARY_PARAGRAPH_LENGTH
 
+# Headers and separators for extraction; change if report template changes
+PARSER_HEADER_PREFIX = "Relatório SRAG"
+PARSER_HEADER_SEP = "—"
+PARSER_STOP_SECTIONS = ("Gráfico", "Visualizações", "Fontes")
+
 
 def _extract_location(lines: list[str]) -> str | None:
     """Extract location from report header."""
     for line in lines:
-        if "Relatório SRAG" in line and "—" in line:
-            return line.split("—")[-1].strip()
+        if PARSER_HEADER_PREFIX in line and PARSER_HEADER_SEP in line:
+            return line.split(PARSER_HEADER_SEP)[-1].strip()
     return None
-
-
-def _extract_executive_summary(lines: list[str]) -> str | None:
-    """Extract executive summary text from report."""
-    in_summary = False
-    summary_text = []
-    for line in lines:
-        if "## Resumo Executivo" in line:
-            in_summary = True
-            continue
-        if in_summary and line.strip() and not line.startswith("#"):
-            summary_text.append(line.strip())
-        elif in_summary and line.startswith("#"):
-            break
-    return " ".join(summary_text) if summary_text else None
-
-
-def _extract_metrics(lines: list[str]) -> dict[str, str]:
-    """Extract key metrics from report content."""
-    metrics = {}
-    in_metrics = False
-
-    for line in lines:
-        if "## Métricas" in line or "Métricas Principais" in line:
-            in_metrics = True
-            continue
-        if in_metrics and line.startswith("#"):
-            break
-        if in_metrics and "|" in line and "---" not in line:
-            parts = [p.strip() for p in line.split("|") if p.strip()]
-            if len(parts) >= 2 and parts[0] not in ["Métrica", "Metric"]:
-                metrics[parts[0]] = parts[1]
-
-    return metrics
 
 
 def _extract_report_body(lines: list[str]) -> str:
     """Extract report body text, stopping at charts/sources sections."""
     report_body_lines = []
     for line in lines:
-        if line.strip().startswith("##") and (
-            "Gráfico" in line or "Visualizações" in line or "Fontes" in line
+        if line.strip().startswith("##") and any(
+            s in line for s in PARSER_STOP_SECTIONS
         ):
             break
         if line.strip().startswith("---"):

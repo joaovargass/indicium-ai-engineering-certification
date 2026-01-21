@@ -27,16 +27,12 @@ dependencies = [
   "langchain>=1.0,<1.1",
   "langgraph>=1.0,<1.1",
   "langchain-openai>=1.0,<1.1",
-  "streamlit>=1.30",
   "dash>=2.14.0",
   "dash-bootstrap-components>=1.5.0",
-  "duckdb>=1.0",
   "pandas>=2.2",
   "numpy>=1.26",
   "matplotlib>=3.9",
   "plotly>=5.24.0",
-  "faiss-cpu>=1.12",
-  "rank-bm25==0.2.2",
   "pydantic>=2",
   "certifi",
   "python-dotenv",
@@ -56,14 +52,12 @@ dependencies = [
   "notebook",
   "azure-storage-file-datalake>=12.19.0",
   "azure-identity>=1.15.0",
-  "ruff",
-  "pylint",
-  "azure-ai-ml",
   "sqlalchemy",
   "pyodbc",
   "kaleido>=1.2.0",
   "diskcache>=5.6.0",
   "multiprocess>=0.70",
+  "loguru>=0.7.3",
 ]
 
 # *********************************************
@@ -97,7 +91,7 @@ where = ["src"]
 [tool.ruff]
 # Black-compatible line length
 line-length = 88
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 # Broad but sane ruleset, similar style to your example
@@ -183,7 +177,7 @@ ignore = [
   "reports",
 ]
 jobs = 0
-py-version = "3.11"
+py-version = "3.12"
 
 [tool.pylint."MESSAGES CONTROL"]
 # Start from defaults and just disable noisy stuff

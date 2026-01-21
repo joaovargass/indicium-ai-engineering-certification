@@ -1,4 +1,4 @@
-"""Data transformation module for SRAG data."""
+"""Data transformation: 9-step cleaning (nulls, whitespace, dates, categories, imputation, validation, filtering). select_essential keeps only ESSENTIAL_COLUMNS."""
 
 import pandas as pd
 
@@ -13,6 +13,8 @@ from common.config import (
     NULL_STRINGS,
     PRIMARY_KEY_FIELD,
 )
+from common.logging import logger
+from elt.errors import ELTError
 
 
 def _get_string_cols(df: pd.DataFrame) -> list[str]:
@@ -192,6 +194,7 @@ def _impute_vaccine(df: pd.DataFrame) -> pd.DataFrame:
         if mask.any():
             df.loc[mask, "VACINA_COV"] = "2"
 
+    # DT_UT_DOSE is not in ESSENTIAL_COLUMNS; if added to schema, this imputes VACINA=1 when dose date exists.
     if all(c in df.columns for c in ["VACINA", "DT_UT_DOSE"]):
         mask = df["VACINA"].isna() & df["DT_UT_DOSE"].notna()
         if mask.any():
@@ -228,7 +231,7 @@ def validate_cats(df: pd.DataFrame) -> pd.DataFrame:
         invalid = cleaned.notna() & ~cleaned.isin(valid)
         count = invalid.sum()
         if count > 0:
-            print(f"  {col_name}: {count:,} invalid -> NULL")
+            logger.debug(f"  {col_name}: {count:,} invalid -> NULL")
             df.loc[invalid, col_name] = None
     return df
 
@@ -236,7 +239,7 @@ def validate_cats(df: pd.DataFrame) -> pd.DataFrame:
 def remove_invalid(df: pd.DataFrame) -> pd.DataFrame:
     """Remove records missing primary key or all null."""
     if PRIMARY_KEY_FIELD not in df.columns:
-        print(f"Warning: {PRIMARY_KEY_FIELD} not found")
+        logger.warning(f"{PRIMARY_KEY_FIELD} not found")
         return df
 
     initial = len(df)
@@ -256,7 +259,9 @@ def remove_invalid(df: pd.DataFrame) -> pd.DataFrame:
 
     total = initial - len(df)
     if total > 0:
-        print(f"Removed {total:,} ({removed_pk:,} no PK, {removed_null:,} all null)")
+        logger.info(
+            f"Removed {total:,} ({removed_pk:,} no PK, {removed_null:,} all null)"
+        )
 
     return df
 
@@ -293,13 +298,13 @@ def filter_actionable(df: pd.DataFrame) -> pd.DataFrame:
 
     non_actionable = (~actionable).sum()
     if non_actionable > 0:
-        print(f"\n  Non-actionable: {non_actionable:,}")
+        logger.debug(f"Non-actionable: {non_actionable:,}")
 
     df = df[actionable].copy()
     excluded = initial - len(df)
     if excluded > 0:
         pct = (excluded / initial * 100) if initial > 0 else 0
-        print(f"  Excluded {excluded:,} non-actionable ({pct:.2f}%)")
+        logger.info(f"Excluded {excluded:,} non-actionable ({pct:.2f}%)")
 
     return df
 
@@ -309,44 +314,50 @@ def select_essential(df: pd.DataFrame) -> pd.DataFrame:
     available = df.columns.tolist()
     missing = [c for c in ESSENTIAL_COLUMNS if c not in available]
 
+    if PRIMARY_KEY_FIELD in missing:
+        raise ELTError(
+            "transform",
+            f"Coluna obrigatória ausente: {PRIMARY_KEY_FIELD}. "
+            f"Ajuste ESSENTIAL_COLUMNS em config se o esquema da fonte mudou. Ausentes: {missing}",
+        )
+
     cols = ESSENTIAL_COLUMNS
     if missing:
-        print(f"Warning: Missing columns: {missing}")
+        logger.warning(f"Missing columns: {missing}")
         cols = [c for c in ESSENTIAL_COLUMNS if c in available]
 
-    print(f"\nSelecting {len(cols)} essential columns from {len(available)} total")
+    logger.info(f"Selecting {len(cols)} essential columns from {len(available)} total")
     result = df[cols]
 
-    print(f"  Rows: {len(result):,}")
-    print(f"  Columns: {len(result.columns)}")
+    logger.debug(f"  Rows: {len(result):,}")
+    logger.debug(f"  Columns: {len(result.columns)}")
 
     return result
 
 
 def analyze_schema(df: pd.DataFrame) -> None:
-    """Print schema summary."""
-    print("=" * 60)
-    print("SCHEMA ANALYSIS")
-    print("=" * 60)
-    print(f"Columns: {len(df.columns)}")
-    print(f"Records: {len(df):,}\n")
+    """Log schema summary."""
+    logger.info("=" * 60)
+    logger.info("SCHEMA ANALYSIS")
+    logger.info("=" * 60)
+    logger.info(f"Columns: {len(df.columns)}")
+    logger.info(f"Records: {len(df):,}")
     for col in df.columns:
-        print(f"  {col:30s} {str(df[col].dtype)}")
+        logger.debug(f"  {col:30s} {str(df[col].dtype)}")
 
 
 def report_quality(df: pd.DataFrame, original: pd.DataFrame) -> None:
-    """Print data quality report."""
-    print("\n" + "=" * 60)
-    print("DATA QUALITY REPORT")
-    print("=" * 60)
+    """Log data quality report."""
+    logger.info("=" * 60)
+    logger.info("DATA QUALITY REPORT")
+    logger.info("=" * 60)
     initial = len(original)
     final = len(df)
     removed = initial - final
     pct = (removed / initial * 100) if initial > 0 else 0
-    print(f"\nRecords: {initial:,} -> {final:,}")
-    print(f"Removed: {removed:,} ({pct:.2f}%)")
+    logger.info(f"Records: {initial:,} -> {final:,}")
+    logger.info(f"Removed: {removed:,} ({pct:.2f}%)")
 
-    print("\nMissing values (top 10):")
     missing = []
     for col in df.columns:
         null_count = df[col].isna().sum()
@@ -355,50 +366,49 @@ def report_quality(df: pd.DataFrame, original: pd.DataFrame) -> None:
             missing.append((col, null_count, p))
 
     if missing:
+        logger.debug("Missing values (top 10):")
         for name, count, p in sorted(missing, key=lambda x: x[2], reverse=True)[:10]:
-            print(f"  {name:30s} {count:10,} ({p:6.2f}%)")
-    else:
-        print("  No missing values!")
-    print("=" * 60)
+            logger.debug(f"  {name:30s} {count:10,} ({p:6.2f}%)")
+    logger.info("=" * 60)
 
 
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     """Execute the data cleaning pipeline."""
-    print("\n" + "=" * 60)
-    print("DATA CLEANING PIPELINE")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("DATA CLEANING PIPELINE")
+    logger.info("=" * 60)
 
     original = df.copy()
     analyze_schema(df)
 
-    print("\n1. Converting NULL strings...")
+    logger.info("1. Converting NULL strings...")
     df = convert_nulls(df)
 
-    print("2. Fixing whitespace...")
+    logger.info("2. Fixing whitespace...")
     df = fix_strings(df)
 
-    print("3. Converting date types...")
+    logger.info("3. Converting date types...")
     df = convert_types(df)
 
-    print("4. Converting 'Ignored' (9) to NULL...")
+    logger.info("4. Converting 'Ignored' (9) to NULL...")
     df = convert_ignored(df)
 
-    print("5. Imputing missing values...")
+    logger.info("5. Imputing missing values...")
     df = impute_missing(df)
 
-    print("6. Validating dates...")
+    logger.info("6. Validating dates...")
     df = validate_dates(df)
 
-    print("7. Validating categories...")
+    logger.info("7. Validating categories...")
     df = validate_cats(df)
 
-    print("8. Removing invalid records...")
+    logger.info("8. Removing invalid records...")
     df = remove_invalid(df)
 
-    print("9. Filtering actionable records...")
+    logger.info("9. Filtering actionable records...")
     df = filter_actionable(df)
 
-    print("\nFinal schema:")
+    logger.info("Final schema:")
     analyze_schema(df)
     report_quality(df, original)
 

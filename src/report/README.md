@@ -68,43 +68,57 @@ flowchart TD
 **`generator.py`** - Main report generation:
 - `generate_report_body()`: Generates integrated narrative report using LLM
 - Builds context from confirmed components (metrics, charts, news)
-- Only includes components that were confirmed via flags
+- Only includes components that were confirmed via flags (include_metrics, include_charts, include_news)
 - Returns tuple of (report_body, sources_section)
 - Falls back to template-based report if LLM fails
 - Context building helpers: `_build_context_header()`, `_build_metrics_context()`, `_build_charts_context()`, `_build_news_context()`
-- Instruction building: `_build_instructions()` creates comprehensive LLM prompt with formatting rules
+- Instruction building: `_build_instructions()` creates comprehensive LLM prompt with formatting rules, integration rules, narrative flow
+- Date handling: Detects when data period_end is before today and instructs LLM to mention weekly updates
 
 **`llm.py`** - LLM integration:
-- `_get_llm()`: Lazy initialization of ChatOpenAI instance (temperature 0.3)
+- `_get_llm()`: Lazy initialization of ChatOpenAI instance (temperature 0.3, model from OPENAI_MODEL or DEFAULT_MODEL_NAME)
 - `generate_executive_summary()`: Generates 2-3 paragraph executive summary from metrics and news
-- `generate_metric_explanation()`: Generates contextualized explanations (2-3 sentences) for individual metrics
+- `generate_metric_explanation()`: Generates contextualized explanations (1 sentence) for individual metrics with calculation details
 - `_check_data_outdated()`: Detects if data period_end is before today and adds note to prompts
+- `_build_metric_context()`: Builds context string for metric explanation prompts
 - Handles LLM failures gracefully with fallback text
+- All prompts instruct LLM to use Portuguese dates (not YYYY-MM-DD format)
 
 **`templates.py`** - Jinja2 templates:
 - `validate_report_request()`: Validates report parameters (days: 7-90, months: 1-24, news: 0-5)
+  - Uses CHART_DAYS_MIN/MAX, CHART_MONTHS_MIN/MAX, MAX_NEWS_ARTICLES from config
 - `render_integrated_report()`: Renders final Markdown report using Jinja2 template
-- Template includes: header with location and generation date, report body, charts section (if included), sources section, footer with data source attribution
+- Template includes: header with location and generation date (DD/MM/YYYY HH:MM), report body, charts section (if include_charts=True), sources section, footer with data source attribution (DATASET_YEAR_RANGE)
 
 **`formatter.py`** - Report formatting:
 - `format_metrics_table()`: Creates Markdown table with metrics and LLM-generated explanations
+  - Calls `generate_metric_explanation()` for each metric
+  - Formats all 4 metrics (case increase, mortality, ICU occupancy, vaccination)
+  - Includes calculation formulas section
 - `format_news_section()`: Formats news articles as Markdown section (detailed or links-only)
-- Truncates explanations to max length (300 chars) for table display
+- Truncates explanations to max length (300 chars, EXPLANATION_MAX_LENGTH) for table display
+- News summaries truncated to NEWS_SUMMARY_MAX_LENGTH (200 chars)
 
 **`parser.py`** - Report parsing:
 - `generate_report_summary()`: Extracts summary from full report for chat display
-- Extracts location, report body, builds paragraphs, respects max character limit (600 chars)
+- Extracts location from header (format: "Relatório SRAG — {location}")
+- Extracts report body, stopping at charts/sources sections
+- Builds paragraphs from text, respects max character limit (600 chars, REPORT_SUMMARY_MAX_CHARS)
+- Returns formatted markdown with location header and summary text
 - Used to show preview in chat before download
 
 **`files.py`** - File operations:
-- `save_report_to_file()`: Saves Markdown report to file
-- `save_report_zip()`: Creates ZIP file with report and chart images
-- Sanitizes location names for filenames
+- `save_report_to_file()`: Saves Markdown report to file in `reports/` directory
+- `save_report_zip()`: Creates ZIP file with report and chart images (PNG files)
+- Sanitizes location names for filenames (removes special characters, spaces, parentheses)
 - Uses date-based naming: `Relatorio_SRAG_{location}_{date}.md` or `.zip`
+- Creates `reports/` directory if it doesn't exist
 
-**`templater.py`** - Facade module:
-- Re-exports all public functions from submodules
-- Provides unified import interface
+**`templater.py`** - Backward compatibility facade:
+- Re-exports all public functions from submodules (llm, formatter, generator, templates, files, parser)
+- Provides unified import interface for backward compatibility
+- New code should import directly from submodules
+- Exports: LLM functions, formatter functions, generator functions, template functions, file functions, parser functions
 
 ## Technical Details
 
