@@ -68,10 +68,12 @@ flowchart LR
 - Returns rate, total deaths, total cases, period dates
 
 **`calculate_icu_occupancy_rate()`**:
-- Calculates percentage of ICU beds occupied
-- Filters patients currently in ICU at period end (DT_ENTUTI ≤ period_end, DT_SAIDUTI > period_end or null)
+- Calculates percentage of ICU beds occupied using standard formula: (Σ pacientes-dia / Σ leitos-dia) × 100
+- Sources: OpenDataSUS (SRAG) for patient-days, CNES for beds (cached 7 days, fallback static data)
+- Calculates patient-days: for each day in period, counts patients in ICU (DT_ENTUTI ≤ day, DT_SAIDUTI ≥ day or null)
 - Fetches ICU bed counts from CNES API (via `retrieval.icu_beds`) or uses provided value
-- Supports lookback period (default: 30 days)
+- Supports lookback period (default: 30 days). period_end limited by data vivo date (from `get_last_live_date()`), or max date in dataset, or today
+- Returns occupancy_rate, patients_in_icu (snapshot at period_end), total_icu_beds, patient_days, bed_days, data_source, metadata
 - Handles period limitation when data availability is shorter than requested
 
 **`calculate_vaccination_rate()`**:
@@ -92,7 +94,7 @@ flowchart LR
 - Auto-detects date column: prefers `DT_SIN_PRI`, falls back to `DT_NOTIFIC`
 - Handles missing dates gracefully (returns None rates with error metadata)
 - Period calculations account for data availability limits
-- ICU calculations cap period_end to today (never uses future dates)
+- ICU period_end is limited by the data vivo date (or max date in dataset, or today)
 
 **Data Quality**:
 - Filters out null/invalid records before calculation
@@ -101,14 +103,19 @@ flowchart LR
 - Period limitation detection for ICU and vaccination metrics
 
 **Helper Functions**:
-- `_filter_by_location()`: Location-based DataFrame filtering
-- `_get_date_column()`: Date column detection with fallback
-- `_prepare_icu_patients()`: ICU patient filtering and date parsing
-- `_calculate_icu_period()`: ICU period calculation with limitation detection
-- `_filter_current_icu_patients()`: Filters patients currently in ICU
-- `_fetch_cnes_beds()`: Fetches ICU bed counts from CNES API
+- `_filter_by_location()`: Location-based DataFrame filtering (UF or city code)
+- `_get_date_column()`: Date column detection with fallback (prefers DT_SIN_PRI, falls back to DT_NOTIFIC)
+- `_prepare_icu_patients()`: ICU patient filtering and date parsing (filters UTI=1, parses DT_ENTUTI, DT_SAIDUTI)
+- `_calculate_icu_period()`: ICU period calculation with limitation detection (uses reference_date from vivo or max date)
+- `_filter_icu_patients_for_period()`: Filters patients relevant for period (DT_ENTUTI ≤ period_end, handles open records)
+- `_filter_current_icu_patients()`: Filters patients currently in ICU at period_end (snapshot count)
+- `_calculate_patient_days()`: Calculates total patient-days for period (standard formula: Σ patients in ICU each day)
+- `_resolve_icu_reference_date()`: Resolves reference date (live date, max in df, or today)
+- `_fetch_cnes_beds()`: Fetches ICU bed counts from CNES API (via `retrieval.icu_beds.get_location_icu_beds()`)
 - `_prepare_vaccination_data()`: Prepares vaccination data with period filtering
 - `_calculate_covid_rate()` / `_calculate_flu_rate()`: Individual vaccine rate calculations
+- `_max_date_from_df()`: Max date across date columns (fallback when get_last_live_date unavailable)
+- `_build_icu_metadata()`: Builds metadata dictionary for ICU occupancy result
 
 ## Dependencies
 

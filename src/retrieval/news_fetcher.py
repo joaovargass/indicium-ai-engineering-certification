@@ -13,6 +13,7 @@ from common.config import (
     NEWS_API_MAX_RESULTS,
     STATE_NAME_PATTERNS,
 )
+from common.logging import logger
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
@@ -54,7 +55,7 @@ def search_srag_news(
         return []
 
     if not TAVILY_API_KEY:
-        print("Warning: TAVILY_API_KEY not set. News search disabled.")
+        logger.warning("TAVILY_API_KEY not set. News search disabled.")
         return []
 
     max_results = max(1, min(NEWS_API_MAX_RESULTS, max_results))
@@ -86,11 +87,11 @@ def search_srag_news(
         return articles
 
     except (ValueError, KeyError, TypeError) as e:
-        print(f"Error parsing news response: {e}")
+        logger.error(f"Error parsing news response: {e}")
         return []
     except ConnectionError as e:
-        print(f"Error connecting to Tavily API: {e}")
+        logger.error(f"Error connecting to Tavily API: {e}")
         return []
     except Exception as e:
-        print(f"Error fetching news: {e}")
+        logger.error(f"Error fetching news: {e}")
         return []

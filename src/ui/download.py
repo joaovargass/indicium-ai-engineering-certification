@@ -7,6 +7,8 @@ import dash_bootstrap_components as dbc
 from dash import html
 from dash.exceptions import PreventUpdate
 
+from common.logging import logger
+
 
 def create_download_button(file_path: str, button_id: str | None = None) -> html.Div:
     """
@@ -45,7 +47,9 @@ def create_download_button(file_path: str, button_id: str | None = None) -> html
     )
 
 
-def handle_download_click(n_clicks: int | None, store_data: dict | None) -> dict:
+def handle_download_click(
+    n_clicks: int | None, store_data: dict | None
+) -> tuple[dict | None, list]:
     """
     Handle download button click - find latest report and trigger download.
 
@@ -54,45 +58,68 @@ def handle_download_click(n_clicks: int | None, store_data: dict | None) -> dict
         store_data: Chat store data containing messages
 
     Returns:
-        Dictionary with file content for download
+        Tuple of (download dict for dcc.Download or None, list of children for chat-feedback Alert)
 
     """
     if not n_clicks or not store_data:
         raise PreventUpdate
 
-    # Find the most recent message with a report file path
     messages = store_data.get("messages", [])
     report_file_path = None
-
-    # Search from most recent to oldest
     for msg in reversed(messages):
         if msg.get("report_file_path"):
             report_file_path = msg.get("report_file_path")
             break
 
     if not report_file_path:
-        raise PreventUpdate
+        return (
+            None,
+            [
+                dbc.Alert(
+                    "Nenhum relatório encontrado nesta conversa.",
+                    color="warning",
+                    dismissable=True,
+                )
+            ],
+        )
 
     report_path = Path(report_file_path)
     if not report_path.exists():
-        raise PreventUpdate
+        return (
+            None,
+            [
+                dbc.Alert(
+                    "Arquivo do relatório não encontrado.",
+                    color="warning",
+                    dismissable=True,
+                )
+            ],
+        )
 
-    # Read file and return for download
     try:
-        # Check if it's a zip file (binary) or markdown (text)
         if report_path.suffix == ".zip":
             with open(report_path, "rb") as f:
                 content = f.read()
             content_b64 = base64.b64encode(content).decode("utf-8")
-            return {
-                "content": content_b64,
-                "filename": report_path.name,
-                "base64": True,
-                "type": "application/zip",
-            }
-        else:
-            with open(report_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            return {"content": content, "filename": report_path.name}
-    except Exception:
-        raise PreventUpdate from None
+            return (
+                {
+                    "content": content_b64,
+                    "filename": report_path.name,
+                    "base64": True,
+                    "type": "application/zip",
+                },
+                [],
+            )
+        with open(report_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return ({"content": content, "filename": report_path.name}, [])
+    except Exception as e:
+        logger.warning("Error reading file for download %s: %s", report_path, e)
+        return (
+            None,
+            [
+                dbc.Alert(
+                    f"Erro ao ler o arquivo: {e}.", color="danger", dismissable=True
+                )
+            ],
+        )

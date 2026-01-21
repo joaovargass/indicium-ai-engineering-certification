@@ -22,6 +22,7 @@ from dash.exceptions import PreventUpdate
 
 from agent import invoke_agent
 from agent.graph import _to_langchain_messages
+from common.logging import logger
 from ui.constants import (
     LOADING_DEFAULT_MESSAGE,
     LOADING_HIDDEN_CLASS,
@@ -148,7 +149,10 @@ def _register_clear_callback(app: dash.Dash) -> None:
 def _register_download_callback(app: dash.Dash) -> None:
     """Register download callback."""
     app.callback(
-        Output("chat-download", "data"),
+        [
+            Output("chat-download", "data"),
+            Output("chat-feedback", "children"),
+        ],
         Input("download-report-btn", "n_clicks"),
         State("chat-store", "data"),
         prevent_initial_call=True,
@@ -235,7 +239,7 @@ def _handle_user_message(
         "",
         True,
         {"user_input": user_input, "thread_id": thread_id},
-        {"step": "Thinking..."},
+        {"step": "Pensando..."},
         False,
         (scroll_trigger or 0) + 1,
         True,
@@ -318,6 +322,7 @@ def _process_agent_response(
         )
 
     except Exception as e:
+        logger.warning("Error processing agent response: %s", e)
         messages.append(
             {
                 "role": "assistant",

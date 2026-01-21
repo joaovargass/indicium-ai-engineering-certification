@@ -44,9 +44,14 @@ def _create_title_section() -> list[html.H2 | html.P]:
             "Faça perguntas sobre dados, métricas e tendências de SRAG",
             className="text-muted small mb-0",
         ),
-        html.P(
+        html.Div(
             id="last-extraction-date",
-            className="text-muted small mb-0 last-extraction-date",
+            children=[
+                html.P(
+                    "Carregando…",
+                    className="text-muted small mb-0 last-extraction-date",
+                )
+            ],
         ),
     ]
 
@@ -105,6 +110,7 @@ def _create_messages_area() -> html.Div:
         id="chat-messages-container",
         className="chat-messages-wrapper",
         children=[
+            html.Div(id="chat-feedback", children=[]),
             html.Div(
                 id="chat-messages",
                 className="chat-messages-scroll",
@@ -159,7 +165,6 @@ def _create_stores() -> list[dcc.Store | dcc.Interval | dcc.Download]:
         dcc.Store(id="chat-loading", data=False),
         dcc.Store(id="chat-pending-request", data=None),
         dcc.Store(id="chat-loading-step", data={"step": "Pensando..."}),
-        dcc.Store(id="chat-download-file", data=None),
         dcc.Interval(
             id="chat-loading-interval",
             interval=LOADING_INTERVAL_MS,
@@ -174,5 +179,11 @@ def _create_stores() -> list[dcc.Store | dcc.Interval | dcc.Download]:
             interval=ELT_STATUS_CHECK_INTERVAL_MS,
             n_intervals=0,
             disabled=True,
+        ),
+        dcc.Interval(
+            id="load-date-interval",
+            interval=800,
+            n_intervals=0,
+            disabled=False,
         ),
     ]

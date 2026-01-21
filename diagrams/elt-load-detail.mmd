@@ -9,19 +9,25 @@ flowchart TD
     ReadState --> DownloadDeltas[Download Unprocessed<br/>Deltas from Azure<br/>raw/deltas/]
     
     DownloadDeltas -->|For Each Delta| LoadDelta[Load Delta File<br/>Read Parquet]
-    LoadDelta --> TransformDelta[Transform Delta<br/>Apply 9 Transform Steps]
-    TransformDelta --> NextDelta{More<br/>Deltas?}
+    LoadDelta --> NextDelta{More<br/>Deltas?}
     NextDelta -->|Yes| LoadDelta
     NextDelta -->|No| Combine[Combine All Deltas<br/>pd.concat<br/>Single DataFrame]
     
-    Combine --> PreparePK[Prepare Primary Key<br/>Convert NU_NOTIFIC<br/>to Int64]
+    Combine --> Deduplicate[Deduplicate<br/>Keep Last by NU_NOTIFIC]
+    Deduplicate --> SelectEssential[Select Essential Columns<br/>ESSENTIAL_COLUMNS]
+    SelectEssential --> Transform[Transform<br/>Apply 9 Cleaning Steps<br/>clean_data]
+    
+    Transform --> PreparePK[Prepare Primary Key<br/>Convert NU_NOTIFIC<br/>to Int64]
     PreparePK --> UploadStaging[Upload to Staging<br/>Azure Data Lake<br/>staging/timestamp_id/]
     
-    UploadStaging --> CopyInto[COPY INTO Synapse<br/>dbo.srag_cleaned<br/>Merge by NU_NOTIFIC]
+    UploadStaging --> CopyInto[COPY INTO Synapse<br/>dbo.srag_cleaned<br/>AUTO_CREATE_TABLE]
     
-    CopyInto --> UpdateDWState[Update DW State<br/>clean/dw_state.json<br/>Mark deltas processed]
+    CopyInto --> TrimDW{Table Size<br/>> Max?}
+    TrimDW -->|Yes| TrimRows[Trim Oldest Rows<br/>Keep ~8M rows]
+    TrimDW -->|No| UpdateDWState
+    TrimRows --> UpdateDWState[Update DW State<br/>clean/dw_state.json<br/>Mark deltas processed]
     
-    UpdateDWState --> UpdateCache[Update Local Cache<br/>data/cleaned/dash_cache.parquet<br/>Full dataset]
+    UpdateDWState --> UpdateCache[Update Local Cache<br/>data/cleaned/dash_cache.parquet<br/>Full dataset from DW]
     
     UpdateCache --> End([Load Complete])
     
@@ -35,9 +41,8 @@ flowchart TD
     
     class ReadState,UpdateDWState stateStyle
     class DownloadDeltas,LoadDelta downloadStyle
-    class TransformDelta,Combine,PreparePK transformStyle
+    class Combine,Deduplicate,SelectEssential,Transform,PreparePK transformStyle
     class UploadStaging uploadStyle
-    class CopyInto dwStyle
+    class CopyInto,TrimDW,TrimRows dwStyle
     class UpdateCache cacheStyle
     class Start,End startEndStyle
-

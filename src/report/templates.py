@@ -9,6 +9,7 @@ from common.config import (
     CHART_DAYS_MIN,
     CHART_MONTHS_MAX,
     CHART_MONTHS_MIN,
+    DATASET_YEAR_RANGE,
     MAX_NEWS_ARTICLES,
 )
 
@@ -31,18 +32,18 @@ def validate_report_request(
 
     """
     if days < CHART_DAYS_MIN or days > CHART_DAYS_MAX:
-        return False, f"Days must be between {CHART_DAYS_MIN} and {CHART_DAYS_MAX}"
+        return False, f"Dias deve estar entre {CHART_DAYS_MIN} e {CHART_DAYS_MAX}"
 
     if months < CHART_MONTHS_MIN or months > CHART_MONTHS_MAX:
         return (
             False,
-            f"Months must be between {CHART_MONTHS_MIN} and {CHART_MONTHS_MAX}",
+            f"Meses deve estar entre {CHART_MONTHS_MIN} e {CHART_MONTHS_MAX}",
         )
 
     if max_news < 0 or max_news > MAX_NEWS_ARTICLES:
         return (
             False,
-            f"Maximum {MAX_NEWS_ARTICLES} news articles allowed (0-{MAX_NEWS_ARTICLES})",
+            f"Maximo de {MAX_NEWS_ARTICLES} artigos permitidos (0-{MAX_NEWS_ARTICLES})",
         )
 
     return True, ""
@@ -82,7 +83,7 @@ def render_integrated_report(
 
 ---
 
-**Fonte de Dados:** OpenDATASUS SRAG Dataset (2023-2025)
+**Fonte de Dados:** OpenDATASUS SRAG Dataset ({{ dataset_year_range }})
 *Gerado automaticamente pelo Agente SRAG com análises contextualizadas.*
 """
 
@@ -96,4 +97,5 @@ def render_integrated_report(
         charts_section=charts_section,
         sources_section=sources_section,
         include_charts=include_charts,
+        dataset_year_range=DATASET_YEAR_RANGE,
     )

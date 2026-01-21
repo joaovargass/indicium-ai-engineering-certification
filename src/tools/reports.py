@@ -11,6 +11,7 @@ from langchain_core.tools import tool
 from charts.charts import figure_to_image_file, plot_daily_cases, plot_monthly_cases
 from charts.stats import extract_daily_stats, extract_monthly_stats
 from common.config import DEFAULT_DAYS, DEFAULT_MONTHS, MAX_NEWS_ARTICLES
+from common.logging import logger
 from elt.load import NoDataAvailableError, load_srag_data
 from report.templater import (
     format_metrics_table,
@@ -80,7 +81,8 @@ def _fetch_news(
         return search_srag_news_tool.invoke(
             {"query": f"SRAG {location_desc}", "max_results": max_results}
         )
-    except (ValueError, KeyError, ConnectionError):
+    except (ValueError, KeyError, ConnectionError) as e:
+        logger.warning("Error fetching news: %s", e)
         return []
 
 
@@ -373,8 +375,12 @@ def generate_chat_report(
 
     report_text = "\n".join(report_lines)
 
-    daily_chart_json = get_daily_chart_json.invoke({"uf": uf, "days": days})
-    monthly_chart_json = get_monthly_chart_json.invoke({"uf": uf, "months": months})
+    daily_chart_json = get_daily_chart_json.invoke(
+        {"uf": uf, "city_code": city_code, "days": days}
+    )
+    monthly_chart_json = get_monthly_chart_json.invoke(
+        {"uf": uf, "city_code": city_code, "months": months}
+    )
 
     return {
         "report_text": report_text,

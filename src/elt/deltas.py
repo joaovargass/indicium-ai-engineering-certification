@@ -1,7 +1,7 @@
 """
 Delta file operations for ELT pipeline.
 
-This module manages the incremental data loading strategy using delta files:
+Manages incremental loading via delta files:
 
 Delta Types:
 - **Frozen**: Complete year data that won't change (e.g., frozen_2023.parquet)
@@ -25,6 +25,7 @@ import pandas as pd
 from azure.storage.filedatalake import FileSystemClient
 
 from common.config import PRIMARY_KEY_FIELD, RAW_DELTAS_DIR
+from common.logging import logger
 from elt.azure import _delete_file, _download_parquet, _upload_parquet
 from elt.state import load_dw_state, load_raw_state, save_dw_state
 
@@ -77,13 +78,13 @@ def _cleanup_live_deltas(
     live_filenames = {d["filename"] for d in live_deltas}
     any_live_processed = bool(live_filenames & processed_by_dw)
 
-    print(f"Year {year} transitioning from live to frozen")
-    print(f"Removing {len(live_deltas)} old live delta(s)...")
+    logger.info(f"Year {year} transitioning from live to frozen")
+    logger.info(f"Removing {len(live_deltas)} old live delta(s)...")
 
     for delta in live_deltas:
         azure_path = f"{RAW_DELTAS_DIR}/{delta['filename']}"
         if _delete_file(client, azure_path):
-            print(f"  Deleted: {delta['filename']}")
+            logger.debug(f"  Deleted: {delta['filename']}")
 
     raw_state["deltas"] = [
         d
@@ -96,7 +97,9 @@ def _cleanup_live_deltas(
             f for f in dw_state["processed_deltas"] if f not in live_filenames
         ]
         save_dw_state(client, dw_state)
-        print(f"  Cleaned up DW state (removed {len(live_filenames)} old entries)")
+        logger.info(
+            f"  Cleaned up DW state (removed {len(live_filenames)} old entries)"
+        )
 
     return raw_state, any_live_processed
 
@@ -107,6 +110,7 @@ def upload_frozen_delta(
     year: int,
     local_temp_dir: Path,
     raw_state: dict,
+    full_refresh: bool = False,
 ) -> dict:
     """
     Upload frozen (complete) year data as a delta file.
@@ -122,13 +126,14 @@ def upload_frozen_delta(
         year: Year being uploaded
         local_temp_dir: Local directory for temp files
         raw_state: Current raw state dictionary
+        full_refresh: When True, re-upload even if year is in processed_years.
 
     Returns:
         Updated raw_state dictionary
 
     """
-    if year in raw_state.get("processed_years", []):
-        print(f"Year {year} already processed, skipping")
+    if year in raw_state.get("processed_years", []) and not full_refresh:
+        logger.info(f"Year {year} already processed, skipping")
         return raw_state
 
     raw_state, live_was_in_dw = _cleanup_live_deltas(client, year, raw_state)
@@ -145,27 +150,42 @@ def upload_frozen_delta(
 
     _upload_parquet(client, df, azure_path, local_temp_dir)
 
+    # On full_refresh re-upload: overwrite file and mark as unprocessed so it gets loaded to DW
+    if full_refresh and year in raw_state.get("processed_years", []):
+        dw_state = load_dw_state(client)
+        processed = dw_state.get("processed_deltas", [])
+        if filename in processed:
+            dw_state["processed_deltas"] = [f for f in processed if f != filename]
+            save_dw_state(client, dw_state)
+            logger.info(f"  Marked {filename} as unprocessed for full refresh")
+        return raw_state
+
     if "processed_years" not in raw_state:
         raw_state["processed_years"] = []
-    raw_state["processed_years"].append(year)
-    raw_state["processed_years"] = sorted(raw_state["processed_years"])
+    if year not in raw_state["processed_years"]:
+        raw_state["processed_years"].append(year)
+        raw_state["processed_years"] = sorted(raw_state["processed_years"])
 
-    raw_state["deltas"].append(
-        {
-            "filename": filename,
-            "year": year,
-            "type": "frozen",
-            "max_notific": max_notific,
-            "rows": len(df),
-            "uploaded_at": datetime.now().isoformat(),
-        }
-    )
+    if "deltas" not in raw_state:
+        raw_state["deltas"] = []
+    # Avoid duplicate delta entry for the same frozen file
+    if not any(d.get("filename") == filename for d in raw_state["deltas"]):
+        raw_state["deltas"].append(
+            {
+                "filename": filename,
+                "year": year,
+                "type": "frozen",
+                "max_notific": max_notific,
+                "rows": len(df),
+                "uploaded_at": datetime.now().isoformat(),
+            }
+        )
 
     if live_was_in_dw:
         dw_state = load_dw_state(client)
         dw_state["processed_deltas"].append(filename)
         save_dw_state(client, dw_state)
-        print(f"  Marked {filename} as already processed (data from live)")
+        logger.info(f"  Marked {filename} as already processed (data from live)")
 
     return raw_state
 
@@ -213,7 +233,7 @@ def upload_live_delta(
         new_records = df
 
     if len(new_records) == 0:
-        print("No new live records to upload")
+        logger.info("No new live records to upload")
         return raw_state
 
     filename = _generate_delta_filename(year, date_str)
@@ -287,30 +307,30 @@ def download_unprocessed_deltas(
     unprocessed = get_unprocessed_deltas(client)
 
     if not unprocessed:
-        print("No unprocessed deltas found")
+        logger.info("No unprocessed deltas found")
         return None, []
 
-    print(f"Found {len(unprocessed)} unprocessed delta(s)")
+    logger.info(f"Found {len(unprocessed)} unprocessed delta(s)")
 
     dataframes = []
     filenames = []
 
     for delta in unprocessed:
         azure_path = f"{RAW_DELTAS_DIR}/{delta['filename']}"
-        print(f"Downloading delta: {delta['filename']} ({delta['rows']:,} rows)")
+        logger.info(f"Downloading delta: {delta['filename']} ({delta['rows']:,} rows)")
 
         try:
             df = _download_parquet(client, azure_path, local_temp_dir)
             dataframes.append(df)
             filenames.append(delta["filename"])
         except Exception as e:
-            print(f"Warning: Could not download {delta['filename']}: {e}")
+            logger.warning(f"Could not download {delta['filename']}: {e}")
 
     if not dataframes:
         return None, []
 
     combined = pd.concat(dataframes, ignore_index=True, sort=False)
-    print(f"Combined {len(filenames)} deltas: {len(combined):,} total rows")
+    logger.info(f"Combined {len(filenames)} deltas: {len(combined):,} total rows")
 
     return combined, filenames
 
