@@ -8,6 +8,7 @@ from azure.core.exceptions import ResourceNotFoundError
 from azure.identity import DefaultAzureCredential
 from azure.storage.filedatalake import DataLakeServiceClient, FileSystemClient
 
+from common.logging import logger
 from common.config import (
     CONNECTION_TIMEOUT_SECONDS,
     FILE_SYSTEM_NAME,
@@ -47,10 +48,10 @@ def _read_json(client: FileSystemClient, path: str) -> dict | None:
     except ResourceNotFoundError:
         return None
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
-        print(f"Warning: Could not parse {path}: {e}")
+        logger.warning(f"Could not parse {path}: {e}")
         return None
     except Exception as e:
-        print(f"Warning: Could not read {path}: {e}")
+        logger.warning(f"Could not read {path}: {e}")
         return None
 
 
@@ -90,11 +91,11 @@ def _delete_directory(client: FileSystemClient, dir_path: str) -> None:
                 except ResourceNotFoundError:
                     pass
                 except Exception as e:
-                    print(f"Warning: Could not delete {path.name}: {e}")
+                    logger.warning(f"Could not delete {path.name}: {e}")
     except ResourceNotFoundError:
         pass
     except Exception as e:
-        print(f"Warning: Could not delete directory {dir_path}: {e}")
+        logger.warning(f"Could not delete directory {dir_path}: {e}")
 
 
 def _upload_parquet(
@@ -113,7 +114,7 @@ def _upload_parquet(
         file_client.upload_data(f.read(), overwrite=True)
 
     temp_file.unlink(missing_ok=True)
-    print(f"Uploaded {len(df):,} rows to {azure_path}")
+    logger.info(f"Uploaded {len(df):,} rows to {azure_path}")
 
 
 def _download_parquet(

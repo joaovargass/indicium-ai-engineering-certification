@@ -139,8 +139,6 @@ def _check_data_outdated(period_end: str | None) -> tuple[str, str | None, str |
     except Exception:
         return "", today_str, None
 
-    return "", None, None
-
 
 def generate_metric_explanation(
     metric_name: str,

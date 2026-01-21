@@ -1,10 +1,11 @@
 """ELT pipeline callback handlers."""
 
 import dash
-from dash import Input, Output, State
+from dash import Input, Output, State, callback_context
 from dash.exceptions import PreventUpdate
 
 from common.config import SPINNER_CLASS_HIDDEN, SPINNER_CLASS_VISIBLE
+from elt.errors import ELTError
 from elt.pipeline import run_incremental_elt
 from ui.state import get_elt_running_status, set_elt_running_status
 from ui.utils import format_extraction_date, load_extraction_date
@@ -12,22 +13,25 @@ from ui.utils import format_extraction_date, load_extraction_date
 
 def register_elt_callbacks(app: dash.Dash) -> None:
     """Register all ELT-related callbacks."""
-    _register_load_date_callback(app)
+    _register_load_date_interval_callback(app)
     _register_start_pipeline_callback(app)
     _register_button_state_callback(app)
     _register_date_update_callback(app)
 
 
-def _register_load_date_callback(app: dash.Dash) -> None:
-    """Register callback to load extraction date on page load."""
+def _register_load_date_interval_callback(app: dash.Dash) -> None:
+    """Load extraction date after a short delay so the page opens without waiting for Azure."""
 
     @app.callback(
-        Output("last-extraction-date", "children"),
-        Input("chat-main-container", "id"),
-        prevent_initial_call=False,
+        [
+            Output("last-extraction-date", "children", allow_duplicate=True),
+            Output("load-date-interval", "disabled"),
+        ],
+        Input("load-date-interval", "n_intervals"),
+        prevent_initial_call=True,
     )
-    def _on_page_load(_: str) -> str:
-        return load_extraction_date()
+    def _on_load_date_interval(n: int) -> tuple[str, bool]:
+        return load_extraction_date(), True
 
 
 def _register_start_pipeline_callback(app: dash.Dash) -> None:
@@ -40,16 +44,8 @@ def _register_start_pipeline_callback(app: dash.Dash) -> None:
         background=True,
         running=[
             (Output("update-data-button", "disabled"), True, False),
-            (
-                Output("update-data-button", "children"),
-                "Atualizando...",
-                "Atualizar Dados",
-            ),
-            (
-                Output("update-button-spinner", "spinner_class_name"),
-                SPINNER_CLASS_VISIBLE,
-                SPINNER_CLASS_HIDDEN,
-            ),
+            (Output("update-button-spinner", "spinner_class_name"), SPINNER_CLASS_VISIBLE, SPINNER_CLASS_HIDDEN),
+            (Output("elt-status-check-interval", "disabled"), False, True),
         ],
         prevent_initial_call=True,
     )
@@ -84,16 +80,39 @@ def _register_button_state_callback(app: dash.Dash) -> None:
             Input("elt-pipeline-status", "data"),
             Input("elt-status-check-interval", "n_intervals"),
             Input("chat-main-container", "id"),
+            Input("update-data-button", "n_clicks"),
         ],
         prevent_initial_call=False,
     )
     def update_button_state(
-        status_data: dict | None, _intervals: int, _container_id: str
+        status_data: dict | None, n_intervals: int, _container_id: str, _n_clicks: int
     ) -> tuple[bool, str, str, bool]:
-        server_running = get_elt_running_status()
+        ctx = callback_context
+
+        if ctx.triggered:
+            triggered_id = ctx.triggered[0]["prop_id"]
+            if triggered_id == "chat-main-container.id":
+                try:
+                    server_running = get_elt_running_status()
+                    if server_running:
+                        return True, SPINNER_CLASS_VISIBLE, "Atualizando...", False
+                    return False, SPINNER_CLASS_HIDDEN, "Atualizar Dados", True
+                except Exception:
+                    return False, SPINNER_CLASS_HIDDEN, "Atualizar Dados", True
+
+        try:
+            server_running = get_elt_running_status()
+        except Exception:
+            server_running = bool(status_data and status_data.get("running"))
 
         if server_running:
-            return True, SPINNER_CLASS_VISIBLE, "Atualizando...", False
+            _msgs = [
+                "Atualizando...",
+                "Primeira carga: ~15 min",
+                "Outras atualizações: ~5–10 min",
+            ]
+            label = _msgs[n_intervals % len(_msgs)]
+            return True, SPINNER_CLASS_VISIBLE, label, False
 
         return False, SPINNER_CLASS_HIDDEN, "Atualizar Dados", True
 
@@ -111,14 +130,22 @@ def _register_date_update_callback(app: dash.Dash) -> None:
             raise PreventUpdate
 
         result = status_data.get("result")
-        if result and not result.startswith("Erro"):
-            return format_extraction_date(result)
-        raise PreventUpdate
+        if not result:
+            raise PreventUpdate
+
+        # Show error in UI instead of hiding it
+        if result.startswith("Erro"):
+            return result
+
+        # Success: format the extraction date
+        return format_extraction_date(result)
 
 
 def _run_elt() -> str:
-    """Run ELT pipeline."""
+    """Run ELT pipeline and return result or error string."""
     try:
         return run_incremental_elt()
+    except ELTError as e:
+        return f"Erro em [{e.stage}]: {e.message}"
     except Exception as e:
         return f"Erro: {str(e)}"

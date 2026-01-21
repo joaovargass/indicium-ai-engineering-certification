@@ -65,4 +65,5 @@ flowchart LR
 - **Streaming**: Uses `graph.stream(stream_mode="values")` with step callbacks for UI progress
 - **Memory**: Optional `MemorySaver` checkpointer (disabled by default due to Dash threading)
 - **Tools**: Dynamically binds 9 tools from `tools.ALL_TOOLS`
-- **Config**: Default model `gpt-5-nano`, temperature `0.0`
+- **Config**: Default model `gpt-5-nano`, temperature `0.0`; tool step/result delays in `common.config`
+- **Logging**: `common.logging` for stream fallback and tool execution

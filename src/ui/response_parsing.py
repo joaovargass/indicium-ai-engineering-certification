@@ -21,6 +21,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, ToolMessage
 from plotly.graph_objects import Figure
 
+from common.logging import logger
 from ui.chart_render import render_tool_chart
 from ui.constants import CHART_TOOL_NAMES
 from ui.tool_parsing import extract_report_info, parse_tool_content
@@ -45,23 +46,24 @@ def parse_agent_response(
     """
     messages = result.get("messages", [])
     if not messages:
-        return "No response from agent.", [], None, False
+        return "Nenhuma resposta do agente.", [], None, False
 
     ai_messages = [m for m in messages if isinstance(m, AIMessage)]
     if not ai_messages:
-        return "Agent response format error.", [], None, False
+        return "Erro no formato da resposta do agente.", [], None, False
 
     text_content = getattr(ai_messages[-1], "content", "")
     tools_called = _extract_tool_names(ai_messages)
     is_explicit_generation = "generate_download_report" in tools_called
 
-    chart_figures, chart_metadata, report_path, report_content = _extract_tool_outputs(
-        messages
+    chart_figures, chart_metadata, report_path, report_content, chart_warnings = (
+        _extract_tool_outputs(messages)
     )
 
-    # Use report content if available
     if report_content:
         text_content = report_content
+    if chart_warnings:
+        text_content = text_content + "\n\n" + " ".join(chart_warnings)
 
     return text_content, chart_figures, report_path, is_explicit_generation
 
@@ -93,7 +95,7 @@ def _extract_tool_names(ai_messages: list[AIMessage]) -> set[str]:
 
 def _extract_tool_outputs(  # noqa: C901
     messages: list,
-) -> tuple[list[Figure], list[dict], str | None, str | None]:
+) -> tuple[list[Figure], list[dict], str | None, str | None, list[str]]:
     """
     Extract charts and report info from tool messages.
 
@@ -110,12 +112,14 @@ def _extract_tool_outputs(  # noqa: C901
         - chart_metadata: List of chart statistics dicts
         - report_path: Report file path or None
         - report_content: Report summary text or None
+        - chart_warnings: List of warning strings for chart failures
 
     """
     chart_figures = []
     chart_metadata = []
     report_path = None
     report_content = None
+    chart_warnings: set[str] = set()
 
     tool_call_map = _build_tool_call_map(messages)
 
@@ -134,6 +138,8 @@ def _extract_tool_outputs(  # noqa: C901
                     chart_figures.append(fig)
                     if metadata:
                         chart_metadata.append(metadata)
+                else:
+                    chart_warnings.add("Um gráfico não pôde ser gerado.")
 
         # Process report tools
         path, content = _extract_report_from_message(msg)
@@ -155,8 +161,9 @@ def _extract_tool_outputs(  # noqa: C901
                         else daily_json
                     )
                     chart_figures.append(Figure(daily_dict))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Falha ao interpretar gráfico diário do relatório: %s", e)
+                    chart_warnings.add("Gráfico do relatório não pôde ser interpretado.")
             if monthly_json:
                 try:
                     monthly_dict = (
@@ -165,10 +172,11 @@ def _extract_tool_outputs(  # noqa: C901
                         else monthly_json
                     )
                     chart_figures.append(Figure(monthly_dict))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Falha ao interpretar gráfico mensal do relatório: %s", e)
+                    chart_warnings.add("Gráfico do relatório não pôde ser interpretado.")
 
-    return chart_figures, chart_metadata, report_path, report_content
+    return chart_figures, chart_metadata, report_path, report_content, list(chart_warnings)
 
 
 def _build_tool_call_map(messages: list) -> dict[str, tuple[str, dict]]:

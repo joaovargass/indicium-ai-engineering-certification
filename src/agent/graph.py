@@ -9,6 +9,7 @@ import time
 import uuid
 from typing import Annotated, Callable, Literal, TypedDict
 
+from common.logging import logger
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -23,7 +24,13 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from agent.prompts import SYSTEM_PROMPT
-from common.config import DEFAULT_MODEL_NAME, DEFAULT_TEMPERATURE, TOOL_STEP_MAPPING
+from common.config import (
+    AGENT_TOOL_RESULT_DELAY_SECONDS,
+    AGENT_TOOL_STEP_DELAY_SECONDS,
+    DEFAULT_MODEL_NAME,
+    DEFAULT_TEMPERATURE,
+    TOOL_STEP_MAPPING,
+)
 from tools import ALL_TOOLS
 
 
@@ -147,9 +154,9 @@ def _execute_tool(tool: object, tool_args: dict, tool_id: str) -> ToolMessage:
             content = str(result)
         return ToolMessage(content=content, tool_call_id=tool_id)
     except (ValueError, KeyError, TypeError) as e:
-        return ToolMessage(content=f"Error: {e}", tool_call_id=tool_id)
+        return ToolMessage(content=f"Erro: {e}", tool_call_id=tool_id)
     except Exception as e:
-        return ToolMessage(content=f"Error: {e}", tool_call_id=tool_id)
+        return ToolMessage(content=f"Erro: {e}", tool_call_id=tool_id)
 
 
 def create_tool_node(
@@ -186,7 +193,7 @@ def create_tool_node(
                     tool_name, f"Executando {tool_name}..."
                 )
                 step_callback(step_message)
-                time.sleep(1.0)
+                time.sleep(AGENT_TOOL_STEP_DELAY_SECONDS)
 
             if tool_name in tool_dict:
                 tool_message = _execute_tool(tool_dict[tool_name], tool_args, tool_id)
@@ -194,7 +201,7 @@ def create_tool_node(
 
         if step_callback and tool_messages:
             step_callback("Processando resultados...")
-            time.sleep(0.5)
+            time.sleep(AGENT_TOOL_RESULT_DELAY_SECONDS)
 
         return {"messages": tool_messages}
 
@@ -319,7 +326,7 @@ def _invoke_with_streaming(
         return graph.invoke(initial_state, config=config)
 
     except Exception as e:
-        print(f"Warning: stream failed, using invoke: {e}")
+        logger.warning(f"Stream failed, using invoke: {e}")
         return graph.invoke(initial_state, config=config)
 
 

@@ -189,6 +189,10 @@ TOOL_STEP_MAPPING = {
     "search_srag_news_tool": "Buscando notícias de saúde...",
 }
 
+# Delay (seconds) before each tool execution and after tool results when using step_callback
+AGENT_TOOL_STEP_DELAY_SECONDS = 1.0
+AGENT_TOOL_RESULT_DELAY_SECONDS = 0.5
+
 # =============================================================================
 # Validation Limits
 # =============================================================================
@@ -220,6 +224,7 @@ CNES_LEITOS_URL_TEMPLATE = (
 # =============================================================================
 # Execution Flags
 # =============================================================================
+# Default incremental; full refresh only when explicitly requested from UI (e.g. "Full refresh" checkbox)
 FULL_REFRESH = False
 DOWNLOAD_ENABLED = True
 
@@ -236,7 +241,7 @@ DW_STATE_PATH = "clean/dw_state.json"
 
 # Data source configuration
 BASE_DOWNLOAD_URL = "https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SRAG"
-OPENDATASUS_URL = "https://opendatasus.saude.gov.br/dataset/srag-2021-a-2024"
+OPENDATASUS_URL = "https://dadosabertos.saude.gov.br/dataset/srag-2021-a-2024"
 
 # Start year for data collection
 START_YEAR = 2023
@@ -315,6 +320,8 @@ COVID_VACCINE_DATE_COLS = [
 # Azure Data Warehouse configuration
 DW_FULLY_QUALIFIED_TABLE = "dbo.srag_cleaned"
 DW_UPLOAD_CHUNK_SIZE = 500000  # Rows per parquet file when uploading to staging
+# Cap total rows in the DW to control storage and cost (~8M lines)
+DW_MAX_ROWS = 8_000_000
 
 # Brazilian states (UF codes) - All 27 states
 BRAZILIAN_STATES = [

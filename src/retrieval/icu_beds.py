@@ -8,6 +8,7 @@ from io import StringIO
 import pandas as pd
 import requests
 
+from common.logging import logger
 from common.config import (
     CACHE_DIR,
     CNES_LEITOS_URL_TEMPLATE,
@@ -133,7 +134,7 @@ def _fetch_from_api(year: int | None = None) -> dict | None:
         }
 
     except Exception as e:
-        print(f"Warning: Could not fetch ICU beds from API: {e}")
+        logger.warning(f"Could not fetch ICU beds from API: {e}")
         return None
 
 

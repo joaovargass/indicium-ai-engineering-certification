@@ -8,7 +8,6 @@ New code should import directly from the appropriate submodules:
 - elt.deltas: Delta file operations
 - elt.dw: Data warehouse operations
 - elt.cache: Cache and data loading
-- elt.reset: Reset operations
 
 Note: Private functions (prefixed with _) are not re-exported.
 Import them directly from their source modules if needed.
@@ -25,8 +24,8 @@ from elt.deltas import (
     upload_live_delta,
 )
 from elt.dw import read_from_dw, save_to_dw
-from elt.reset import reset_all_state
 from elt.state import (
+    cache_extraction_date_local,
     get_extraction_date,
     load_dw_state,
     load_raw_state,
@@ -45,6 +44,7 @@ __all__ = [
     "save_dw_state",
     "get_extraction_date",
     "update_extraction_date",
+    "cache_extraction_date_local",
     # Delta operations
     "upload_frozen_delta",
     "upload_live_delta",
@@ -57,6 +57,4 @@ __all__ = [
     # Cache
     "NoDataAvailableError",
     "load_srag_data",
-    # Reset
-    "reset_all_state",
 ]

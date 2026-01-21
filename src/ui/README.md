@@ -70,3 +70,4 @@ sequenceDiagram
 - Auto-scrolls to latest message
 - Supports HTML tables, Plotly charts, Markdown formatting
 - ELT status polling every 2 seconds during pipeline execution
+- `state.py`, `chart_render.py` use `common.logging` (loguru) for warnings

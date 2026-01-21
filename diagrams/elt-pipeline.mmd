@@ -4,7 +4,7 @@ flowchart LR
     Load --> Transform[Transform<br/>9 Cleaning Steps<br/>Data Validation<br/>Update Cache]
     Transform --> End([Complete])
     
-    State[State Files<br/>raw/state.json<br/>dw_state.json] -.->|Track Progress| Extract
+    State[State Files<br/>raw/state.json<br/>clean/dw_state.json] -.->|Track Progress| Extract
     State -.->|Track Progress| Load
     
     classDef extractStyle fill:#2563eb,stroke:#1e40af,stroke-width:3px,color:#fff

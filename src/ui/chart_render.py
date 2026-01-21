@@ -14,6 +14,7 @@ Used by response_parsing.py to render charts from tool outputs.
 import pandas as pd
 from plotly.graph_objects import Figure
 
+from common.logging import logger
 from common.config import DEFAULT_DAYS, DEFAULT_MONTHS
 from elt.load import load_srag_data
 from tools.location_utils import determine_location_filter
@@ -72,7 +73,7 @@ def render_tool_chart(
                 y_label,
             )
     except Exception as e:
-        print(f"Warning: Chart generation failed for {tool_name}: {e}")
+        logger.warning(f"Chart generation failed for {tool_name}: {e}")
     return None, None
 
 

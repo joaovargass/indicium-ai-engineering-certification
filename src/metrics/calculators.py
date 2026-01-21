@@ -5,6 +5,7 @@ from typing import Any
 
 import pandas as pd
 
+from common.logging import logger
 from common.config import DEFAULT_LOOKBACK_DAYS
 
 
@@ -466,7 +467,7 @@ def _fetch_cnes_beds(
             # National data
             return get_location_icu_beds()
     except Exception as e:
-        print(f"Warning: Could not get ICU beds from CNES: {e}")
+        logger.warning(f"Could not get ICU beds from CNES: {e}")
         return None, None
 
 

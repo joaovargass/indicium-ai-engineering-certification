@@ -15,7 +15,6 @@ CHART_TOOL_NAMES = frozenset({"get_daily_chart_json", "get_monthly_chart_json"})
 
 # Loading indicator messages
 LOADING_DEFAULT_MESSAGE = "Pensando..."
-LOADING_PROCESSING_MESSAGE = "Processando resultados..."
 
 # CSS class constants for loading visibility
 LOADING_VISIBLE_CLASS = "loading-indicator-overlay loading-indicator-visible"

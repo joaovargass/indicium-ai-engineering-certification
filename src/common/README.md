@@ -24,6 +24,10 @@ Centralized configuration module containing all constants, paths, defaults, and 
 - **News Configuration**: Health keywords (Portuguese/English), max results (20), article limits (5)
 - **Error Messages**: Standardized Portuguese error messages for no-data scenarios
 
+**`logging.py`**:
+- Loguru setup: console (stderr, colored) and `logs/app.log` (rotation 10MB, 7-day retention, zip compression)
+- `setup_logging()` and `logger`; `logs/` is gitignored. Used by ELT, agent, UI, metrics, retrieval.
+
 ## Technical Details
 
 - Loads environment variables via `dotenv` at module import

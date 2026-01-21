@@ -231,8 +231,11 @@ Extract → Upload Deltas → Download Unprocessed → Load to DW → Transform 
 - `filter_actionable()`: Removes records that can't contribute to any metric
 
 **`load.py`** - Backward compatibility facade:
-- Re-exports public functions from submodules
+- Re-exports public functions from azure, cache, deltas, dw, state
 - Provides unified import interface
+
+**`errors.py`** - Pipeline failure reporting:
+- `ELTError(stage, message)`: raised when an ELT stage fails; used by `elt_callbacks` to show `[stage]: message` in the UI
 
 **`azure.py`** - Azure Data Lake Gen2 operations:
 - `get_client()`: Initializes FileSystemClient with DefaultAzureCredential
@@ -270,9 +273,7 @@ Extract → Upload Deltas → Download Unprocessed → Load to DW → Transform 
 - Raises `NoDataAvailableError` if no data available
 - Updates cache after DW loads
 
-**`reset.py`** - Pipeline reset:
-- `reset_all_state()`: Deletes all Azure state files, deltas, DW table, local files
-- Used for full pipeline reset/testing
+**Logging**: ELT modules use `common.logging` (loguru) for info, warning, and error messages.
 
 ## Technical Details
 
@@ -296,6 +297,7 @@ Extract → Upload Deltas → Download Unprocessed → Load to DW → Transform 
 - Delta tracking: Avoids re-processing already-loaded data
 
 **Error Handling**:
+- `ELTError(stage, message)` for pipeline failures; extraction date is updated only on full success
 - Encoding fallbacks: UTF-8 → Latin-1 → Python engine with skip bad lines
 - Missing file handling: Returns None instead of raising exceptions
 - State file defaults: Returns empty state dicts if files don't exist

@@ -11,40 +11,6 @@ def _extract_location(lines: list[str]) -> str | None:
     return None
 
 
-def _extract_executive_summary(lines: list[str]) -> str | None:
-    """Extract executive summary text from report."""
-    in_summary = False
-    summary_text = []
-    for line in lines:
-        if "## Resumo Executivo" in line:
-            in_summary = True
-            continue
-        if in_summary and line.strip() and not line.startswith("#"):
-            summary_text.append(line.strip())
-        elif in_summary and line.startswith("#"):
-            break
-    return " ".join(summary_text) if summary_text else None
-
-
-def _extract_metrics(lines: list[str]) -> dict[str, str]:
-    """Extract key metrics from report content."""
-    metrics = {}
-    in_metrics = False
-
-    for line in lines:
-        if "## Métricas" in line or "Métricas Principais" in line:
-            in_metrics = True
-            continue
-        if in_metrics and line.startswith("#"):
-            break
-        if in_metrics and "|" in line and "---" not in line:
-            parts = [p.strip() for p in line.split("|") if p.strip()]
-            if len(parts) >= 2 and parts[0] not in ["Métrica", "Metric"]:
-                metrics[parts[0]] = parts[1]
-
-    return metrics
-
-
 def _extract_report_body(lines: list[str]) -> str:
     """Extract report body text, stopping at charts/sources sections."""
     report_body_lines = []

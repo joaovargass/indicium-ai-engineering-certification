@@ -111,7 +111,15 @@ The setup script creates all required Azure resources:
 - SQL Server and Database
 - Assigns necessary permissions
 
-### Unix/macOS/Linux
+### Before running
+
+- Run from the **project root** so the script finds `.env` when it exists.
+- The script **loads `.env` automatically** if the file exists; you do **not** need to run `source .env` before the script.
+- **When `.env` exists**, `SUBSCRIPTION_ID` must be set in `.env` (get it from Azure Portal or `az account show --query id -o tsv` after `az login`). If `.env` does not exist, the script uses the subscription from `az account show`.
+
+### Unix / macOS / Linux
+
+From the project root:
 
 ```bash
 chmod +x scripts/azure-setup.sh
@@ -120,28 +128,49 @@ chmod +x scripts/azure-setup.sh
 
 ### Windows
 
-**Option 1 - Git Bash or WSL**:
+Run from the project root. Use one of:
+
+**Option 1 – Git Bash or WSL**:
 ```bash
 bash scripts/azure-setup.sh
 ```
 
-**Option 2 - PowerShell with WSL**:
+**Option 2 – PowerShell with WSL**:
 ```powershell
 wsl bash scripts/azure-setup.sh
 ```
 
 ### After Setup
 
-1. The script saves credentials to `.secrets/azure-credentials.txt`
-2. Add the generated credentials to your `.env` file:
+1. The script **prints** credentials at the end. Copy the printed block into your `.env` file.
+2. Ensure these variables (or their placeholders when Synapse/SQL pool was skipped on Free Trial) are in `.env`:
    ```env
-   STORAGE_ACCOUNT_NAME=<from-credentials>
-   FILE_SYSTEM_NAME=<from-credentials>
-   AZURE_SQL_SERVER=<from-credentials>
-   AZURE_SQL_DATABASE=<from-credentials>
-   AZURE_SQL_USER=<from-credentials>
-   AZURE_SQL_PASSWORD=<from-credentials>
+   SUBSCRIPTION_ID=
+   AZURE_TENANT_ID=
+   AZURE_CLIENT_ID=
+   AZURE_CLIENT_SECRET=
+   STORAGE_ACCOUNT_NAME=
+   FILE_SYSTEM_NAME=
+   AZURE_SYNAPSE_WORKSPACE_NAME=
+   AZURE_RESOURCE_GROUP=
+   AZURE_SQL_POOL_NAME=
+   AZURE_SYNAPSE_SQL_ENDPOINT=
+   AZURE_SQL_ADMIN_USER=
+   AZURE_SQL_ADMIN_PASSWORD=
+   AZURE_SQL_POOL_PERFORMANCE_LEVEL=
+   AZURE_STORAGE_KEY=
+   AZURE_STORAGE_SAS_TOKEN=
    ```
+   If Synapse or the SQL pool was skipped (e.g. Free Trial), the script prints placeholders like `<SYNAPSE_NOT_AVAILABLE_FREE_TRIAL>` or `<SQL_POOL_QUOTA_FREE_TRIAL>`; the Data Lake and ELT can still run without Synapse.
+
+### Costs and Synapse
+
+The **Dedicated SQL Pool** is billed 24/7 while **Online**. Resume/pause is automatic when you click **Atualizar Dados**. For manual control, wait until the pool is fully provisioned (provisioningState Succeeded), then:
+
+- **Pause:** `az synapse sql pool pause --name <pool> --workspace-name <workspace> -g <rg>`
+- **Resume:** `az synapse sql pool resume --name <pool> --workspace-name <workspace> -g <rg>`
+
+Use `--storage-only` when running `scripts/azure-setup.sh` to create only Storage (file system, directories, Service Principal, key, SAS) and **not** Synapse Workspace or the SQL Pool. This suits scenarios where you only need Data Lake.
 
 ---
 
@@ -223,6 +252,7 @@ Ask questions in Portuguese about SRAG data:
 
 ```
 ├── app.py                      # Main Dash application entry point
+├── .env.example                # Example environment variables (copy to .env)
 ├── pyproject.toml              # Project dependencies and configuration
 ├── src/
 │   ├── ui/                     # Dash UI components and callbacks
@@ -258,7 +288,7 @@ Ask questions in Portuguese about SRAG data:
 │   │   ├── deltas.py           # Delta file management
 │   │   ├── state.py            # ELT state management
 │   │   ├── cache.py            # Local caching utilities
-│   │   └── reset.py            # Pipeline reset functionality
+│   │   └── errors.py           # ELTError for pipeline failure reporting
 │   ├── charts/                 # Plotly visualization
 │   │   ├── charts.py           # Chart generation functions
 │   │   └── stats.py            # Statistical calculations
@@ -276,7 +306,8 @@ Ask questions in Portuguese about SRAG data:
 │   │   ├── icu_beds.py         # CNES ICU beds data fetcher
 │   │   └── news_fetcher.py     # Tavily news API integration
 │   └── common/                  # Shared configuration and utilities
-│       └── config.py            # Centralized configuration constants
+│       ├── config.py            # Centralized configuration constants
+│       └── logging.py           # Loguru setup (console + logs/app.log, rotation)
 ├── diagrams/                   # Architecture diagrams (Mermaid)
 │   ├── architecture-overview.mmd
 │   ├── agent-flow.mmd
@@ -472,7 +503,7 @@ The platform processes only aggregated, population-level statistics. Individual 
 
 ### Code Quality
 
-The codebase follows clean code principles with modular organization, single-responsibility functions, comprehensive type hints (`Annotated`, `TypedDict`), and docstrings for all public functions. Configuration is centralized in `common.config`, validation logic is reusable, and error handling includes fallbacks. The data transformation pipeline is structured as a 9-step process with explicit logging of each stage, schema analysis, and quality reporting. Code is organized by domain (agent, tools, elt, metrics, charts, report, retrieval, ui) with clear module boundaries and README documentation for each component.
+The codebase follows clean code principles with modular organization, single-responsibility functions, comprehensive type hints (`Annotated`, `TypedDict`), and docstrings for all public functions. Configuration is centralized in `common.config`, validation logic is reusable, and error handling uses `ELTError(stage, message)` for pipeline failures. Structured logging via `common.logging` (loguru) is used across ELT, agent, UI, metrics, and retrieval. The data transformation pipeline is a 9-step process with schema analysis and quality reporting. Code is organized by domain (agent, tools, elt, metrics, charts, report, retrieval, ui) with clear module boundaries and README documentation for each component.
 
 ---
 
@@ -495,6 +526,7 @@ The codebase follows clean code principles with modular organization, single-res
 - **Azure Data Lake Gen2**: Raw data and delta files
 - **Azure Synapse Analytics**: Processed data warehouse
 - **Local Cache**: `diskcache` for ELT state and UI state
+- **Logs**: `logs/app.log` (loguru, rotation 10MB, 7-day retention; `logs/` is gitignored)
 
 ### Key Technologies
 
@@ -502,6 +534,7 @@ The codebase follows clean code principles with modular organization, single-res
 - **AI/ML**: LangGraph, LangChain, OpenAI API
 - **Data Processing**: Pandas, NumPy, PyArrow
 - **Visualization**: Plotly
+- **Logging**: Loguru (console + file, used across ELT, agent, UI, metrics, retrieval)
 - **Cloud**: Azure Data Lake Gen2, Azure Synapse Analytics
 - **Database**: SQL Server via ODBC
 - **Package Management**: UV

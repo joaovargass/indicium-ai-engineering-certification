@@ -4,7 +4,8 @@ config:
   maxWidth: 1200
 ---
 flowchart TD
-    Start([Raw Data]) --> Step1["Convert NULL Strings - convert_nulls"]
+    Start([Raw Data]) --> Select["Select Essential Columns - select_essential"]
+    Select --> Step1["Convert NULL Strings - convert_nulls"]
     Step1 --> Step2["Fix Whitespace - fix_strings"]
     Step2 --> Step3["Convert Date Types - convert_types"]
     Step3 --> Step4["Convert Ignored Values - convert_ignored"]
@@ -13,8 +14,7 @@ flowchart TD
     Step6 --> Step7["Validate Categories - validate_cats"]
     Step7 --> Step8["Remove Invalid Records - remove_invalid"]
     Step8 --> Step9["Filter Actionable - filter_actionable"]
-    Step9 --> Select["Select Essential Columns - ESSENTIAL_COLUMNS"]
-    Select --> End([Clean Data])
+    Step9 --> End([Clean Data])
     
     classDef stepStyle fill:#fef3c7,stroke:#ca8a04,stroke-width:2px,color:#78350f
     classDef selectStyle fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a

@@ -1,4 +1,4 @@
-"""Data Warehouse operations for ELT pipeline."""
+"""Data Warehouse: read/write to Azure Synapse via COPY INTO, staging in ADLS Gen2. Adds PK constraint on replace."""
 
 import os
 from datetime import datetime
@@ -6,8 +6,10 @@ from urllib.parse import quote_plus
 
 import pandas as pd
 
+from common.logging import logger
 from common.config import (
     DW_FULLY_QUALIFIED_TABLE,
+    DW_MAX_ROWS,
     DW_UPLOAD_CHUNK_SIZE,
     FILE_SYSTEM_NAME,
     PRIMARY_KEY_FIELD,
@@ -76,12 +78,12 @@ def read_from_dw(
             tbl = table
         query = f"SELECT * FROM {schema}.{tbl}"
 
-    print(f"Reading from {server}/{db}")
+    logger.info(f"Reading from {server}/{db}")
     with engine.connect() as conn:
         df = pd.read_sql(query, conn)
 
     engine.dispose()
-    print(f"Loaded {len(df):,} rows")
+    logger.info(f"Loaded {len(df):,} rows")
     return df
 
 
@@ -235,9 +237,9 @@ def _add_pk_constraint(conn: object, schema: str, tbl: str) -> None:
                 f"({PRIMARY_KEY_FIELD}) NOT ENFORCED"
             )
         )
-        print(f"  Added PK constraint on {PRIMARY_KEY_FIELD}")
+        logger.info(f"  Added PK constraint on {PRIMARY_KEY_FIELD}")
     except Exception as pk_err:
-        print(f"  PK constraint skipped: {pk_err}")
+        logger.warning(f"  PK constraint skipped: {pk_err}")
 
 
 def _copy_into_dw(
@@ -273,8 +275,8 @@ def _copy_into_dw(
     has_pk = PRIMARY_KEY_FIELD in df.columns
 
     conn_str, server, db = _get_sql_connection()
-    print(f"Connecting to {server}/{db}")
-    print(f"COPY INTO: Loading {len(df):,} rows to {schema}.{tbl} ({if_exists} mode)")
+    logger.info(f"Connecting to {server}/{db}")
+    logger.info(f"COPY INTO: Loading {len(df):,} rows to {schema}.{tbl} ({if_exists} mode)")
 
     client = get_client()
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -286,22 +288,66 @@ def _copy_into_dw(
     engine = create_engine(conn_str, isolation_level="AUTOCOMMIT")
 
     try:
-        print("Uploading to ADLS Gen2 staging...")
+        logger.info("Uploading to ADLS Gen2 staging...")
         parquet_files = _upload_to_staging(
             client, df, staging_dir, DW_UPLOAD_CHUNK_SIZE
         )
-        print(f"Staged {len(parquet_files)} files, executing COPY INTO...")
+        logger.info(f"Staged {len(parquet_files)} files, executing COPY INTO...")
 
         with engine.connect() as conn:
             row_count = _execute_copy_into(
                 conn, schema, tbl, staging_dir, storage_key, if_exists, has_pk
             )
 
-        print(f"COPY INTO complete: {row_count:,} rows loaded")
+        logger.info(f"COPY INTO complete: {row_count:,} rows loaded")
         return row_count
 
     finally:
-        print("Cleaning up staging files...")
+        logger.info("Cleaning up staging files...")
         _delete_directory(client, staging_dir)
-        print(f"Deleted staging directory: {staging_dir}")
+        logger.debug(f"Deleted staging directory: {staging_dir}")
+        engine.dispose()
+
+
+def trim_dw_to_max_rows(
+    table: str = DW_FULLY_QUALIFIED_TABLE,
+    max_rows: int | None = None,
+) -> None:
+    """
+    Delete oldest rows (by NU_NOTIFIC) when table count exceeds max_rows.
+    Keeps the most recent ~8M rows to cap storage and cost.
+    """
+    if max_rows is None:
+        max_rows = DW_MAX_ROWS
+    try:
+        from sqlalchemy import create_engine, text
+    except ImportError:
+        logger.warning("trim_dw_to_max_rows requires sqlalchemy")
+        return
+    schema = os.getenv("AZURE_SQL_SCHEMA", "dbo")
+    if "." in table:
+        schema, tbl = table.rsplit(".", 1)
+    else:
+        tbl = table
+    conn_str, server, db = _get_sql_connection()
+    engine = create_engine(conn_str, isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as conn:
+            r = conn.execute(text(f"SELECT COUNT(*) FROM [{schema}].[{tbl}]"))
+            cnt = r.scalar()
+            if cnt is None or cnt <= max_rows:
+                return
+            over = int(cnt) - max_rows
+            conn.execute(
+                text(
+                    f"DELETE FROM [{schema}].[{tbl}] WHERE {PRIMARY_KEY_FIELD} IN "
+                    f"(SELECT {PRIMARY_KEY_FIELD} FROM (SELECT {PRIMARY_KEY_FIELD}, "
+                    f"ROW_NUMBER() OVER (ORDER BY {PRIMARY_KEY_FIELD} ASC) AS rn FROM [{schema}].[{tbl}]) x WHERE rn <= :over)"
+                ),
+                {"over": over},
+            )
+            logger.info(f"Trimmed DW to {max_rows:,} rows (removed {over:,} oldest)")
+    except Exception as e:
+        logger.warning(f"Could not trim DW to {max_rows:,} rows: {e}")
+    finally:
         engine.dispose()
