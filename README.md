@@ -81,23 +81,59 @@ sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
    cd <repository-folder>
    ```
 
-2. **Install dependencies**
+2. **Create virtual environment and install dependencies**
+   
+   UV will automatically create a virtual environment if one doesn't exist:
    ```bash
    uv sync
    ```
+   
+   This command will:
+   - Create a virtual environment (if it doesn't exist) in `.venv/`
+   - Install all project dependencies from `pyproject.toml`
+   
+   Alternatively, you can explicitly create the venv first:
+   ```bash
+   uv venv
+   uv sync
+   ```
 
-3. **Create environment file**
+3. **Activate the virtual environment**
+   
+   **Unix / macOS / Linux**:
+   ```bash
+   source .venv/bin/activate
+   ```
+   
+   **Windows (PowerShell)**:
+   ```powershell
+   .venv\Scripts\Activate.ps1
+   ```
+   
+   **Windows (Command Prompt)**:
+   ```cmd
+   .venv\Scripts\activate.bat
+   ```
+
+4. **Create environment file**
    ```bash
    cp .env.example .env
    ```
 
-4. **Configure API Keys**
+5. **Configure API Keys and Azure Subscription**
    
    Edit `.env` and add your keys:
    ```env
    OPENAI_API_KEY=your-openai-api-key # https://platform.openai.com/account/api-keys
    TAVILY_API_KEY=your-tavily-api-key # https://tavily.com/api
+   SUBSCRIPTION_ID=your-subscription-id # Get from: az account show
    ```
+   
+   To get your Azure subscription ID, run:
+   ```bash
+   az account show
+   ```
+   Copy the `id` field value and add it to `.env` as `SUBSCRIPTION_ID`.
 
 ---
 
@@ -260,10 +296,32 @@ Central reference for environment variables, config that depends on external sou
 |----------|---------|
 | `OPENAI_API_KEY` | LLM (agent, report body, executive summary, metric explanations). If missing: calls fail. |
 | `TAVILY_API_KEY` | News search. If missing: `search_srag_news` returns `[]`, reports have no news. |
+| `SUBSCRIPTION_ID` | Azure subscription ID required for Azure infrastructure setup. If missing: Azure setup script fails. |
 
 #### Azure (ELT, DW, Synapse)
 
-See `scripts/azure-setup.sh` and README. Main: `STORAGE_ACCOUNT_NAME`, `FILE_SYSTEM_NAME`, `AZURE_SYNAPSE_SQL_ENDPOINT` or `AZURE_SQL_SERVER`, `AZURE_SQL_POOL_NAME` or `AZURE_SQL_DATABASE`, `AZURE_SQL_ADMIN_USER`, `AZURE_SQL_ADMIN_PASSWORD`, `AZURE_STORAGE_KEY` (for `save_to_dw`), `AZURE_SYNAPSE_WORKSPACE_NAME`, `AZURE_RESOURCE_GROUP`. For `az synapse sql pool resume/pause`: `AZURE_SQL_POOL_NAME`/`AZURE_SQL_DATABASE`, `AZURE_RESOURCE_GROUP`.
+These variables are automatically set by `scripts/azure-setup.sh`. See the [Azure Infrastructure Setup](#azure-infrastructure-setup) section for details.
+
+**Storage (Data Lake Gen2)**:
+- `STORAGE_ACCOUNT_NAME` - Storage account name
+- `FILE_SYSTEM_NAME` - File system (container) name
+- `AZURE_STORAGE_KEY` - Storage account key (required for `save_to_dw`)
+
+**SQL Database / Synapse**:
+- `AZURE_SYNAPSE_SQL_ENDPOINT` or `AZURE_SQL_SERVER` - SQL endpoint/server
+- `AZURE_SQL_POOL_NAME` or `AZURE_SQL_DATABASE` - SQL pool or database name
+- `AZURE_SQL_ADMIN_USER` - SQL admin username
+- `AZURE_SQL_ADMIN_PASSWORD` - SQL admin password
+
+**Synapse Workspace**:
+- `AZURE_SYNAPSE_WORKSPACE_NAME` - Synapse workspace name
+
+**Resource Management**:
+- `AZURE_RESOURCE_GROUP` - Azure resource group name
+
+**For `az synapse sql pool resume/pause` commands**:
+- `AZURE_SQL_POOL_NAME` or `AZURE_SQL_DATABASE`
+- `AZURE_RESOURCE_GROUP`
 
 #### Overrides (optional)
 
