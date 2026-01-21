@@ -44,10 +44,9 @@ def _create_title_section() -> list[html.H2 | html.P]:
             "Faça perguntas sobre dados, métricas e tendências de SRAG",
             className="text-muted small mb-0",
         ),
-        html.P(
-            "Carregando…",
+        html.Div(
             id="last-extraction-date",
-            className="text-muted small mb-0 last-extraction-date",
+            children=[html.P("Carregando…", className="text-muted small mb-0 last-extraction-date")],
         ),
     ]
 

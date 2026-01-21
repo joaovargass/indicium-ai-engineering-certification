@@ -171,7 +171,7 @@ flowchart TD
 **`metric_tools.py`** - Metric calculation tools:
 - `get_case_increase_rate()`: Case growth rate comparing current vs previous period (default: 7 days)
 - `get_mortality_rate()`: Mortality percentage (deaths/cases, default: 12 months lookback)
-- `get_icu_occupancy_rate()`: ICU bed occupancy rate (default: 30 days lookback)
+- `get_icu_occupancy_rate()`: ICU bed occupancy rate (default: 30 days lookback). Sources: OpenDataSUS (SRAG), CNES (beds)
 - `get_vaccination_rate()`: COVID-19 and/or flu vaccination rates (default: 12 months lookback)
 - All tools support `uf` (state code) and `city_code` (IBGE code) parameters
 - Returns structured dictionaries with rates, counts, periods, and metadata

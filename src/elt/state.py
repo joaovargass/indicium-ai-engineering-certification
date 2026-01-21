@@ -82,6 +82,23 @@ def get_extraction_date() -> str | None:
         return _EXTRACTION_DATE_CACHE.get("last_extraction_date")
 
 
+def _fetch_last_live_date_from_azure() -> str | None:
+    """Fetch last live date (vivo) from Azure raw_state. Used in a thread with timeout."""
+    client = get_client()
+    state = load_raw_state(client)
+    return state.get("last_live_date")
+
+
+def get_last_live_date() -> str | None:
+    """Get last live date (vivo) from raw_state: Azure with 5s timeout. Format dd-mm-yyyy."""
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            f = ex.submit(_fetch_last_live_date_from_azure)
+            return f.result(timeout=5)
+    except Exception:
+        return None
+
+
 def load_dw_state(client: FileSystemClient) -> dict:
     """Load DW state from Azure."""
     state = _read_json(client, DW_STATE_PATH)

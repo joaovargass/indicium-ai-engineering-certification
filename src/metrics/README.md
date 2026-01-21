@@ -68,10 +68,10 @@ flowchart LR
 - Returns rate, total deaths, total cases, period dates
 
 **`calculate_icu_occupancy_rate()`**:
-- Calculates percentage of ICU beds occupied
+- Calculates percentage of ICU beds occupied. Sources: OpenDataSUS (SRAG) for patient-days, CNES for beds
 - Filters patients currently in ICU at period end (DT_ENTUTI ≤ period_end, DT_SAIDUTI > period_end or null)
 - Fetches ICU bed counts from CNES API (via `retrieval.icu_beds`) or uses provided value
-- Supports lookback period (default: 30 days)
+- Supports lookback period (default: 30 days). period_end limited by data vivo date (or max date in dataset, or today)
 - Handles period limitation when data availability is shorter than requested
 
 **`calculate_vaccination_rate()`**:
@@ -92,7 +92,7 @@ flowchart LR
 - Auto-detects date column: prefers `DT_SIN_PRI`, falls back to `DT_NOTIFIC`
 - Handles missing dates gracefully (returns None rates with error metadata)
 - Period calculations account for data availability limits
-- ICU calculations cap period_end to today (never uses future dates)
+- ICU period_end is limited by the data vivo date (or max date in dataset, or today)
 
 **Data Quality**:
 - Filters out null/invalid records before calculation

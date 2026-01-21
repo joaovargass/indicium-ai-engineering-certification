@@ -144,12 +144,17 @@ Métricas Confirmadas:
   Período: {case_period_start} até {case_period_end}
 - Taxa de mortalidade: {mortality_rate}% ({total_deaths} óbitos em {total_cases} casos)
   Período: {mortality_period_start} até {mortality_period_end}
-- Taxa de ocupação de UTI: {icu_rate}% ({icu_patients} pacientes de {icu_beds} leitos)
-  Período: {icu_period_start} até {icu_period_end}
+- Taxa de ocupação de UTI (SRAG): {icu_rate}%. Ao fim: {icu_patients} pacientes, {icu_beds} leitos. Período: {icu_period_start} até {icu_period_end}
 - Taxa de vacinação COVID-19: {covid_vax}%
 - Taxa de vacinação Gripe: {flu_vax}%
   Período: {vax_period_start} até {vax_period_end}
 {date_context}
+
+Como são calculadas:
+- Taxa de aumento: (casos atual − casos anterior) / casos anterior × 100; períodos de 7 dias; últimos 7 excluídos por atraso.
+- Mortalidade: óbitos / casos com evolução conhecida × 100; excl. evolução ignorada.
+- Ocupação UTI (SRAG): (Σ pacientes-dia SRAG em UTI) / (Σ leitos-dia) × 100; pacientes-dia: OpenDataSUS (SRAG); leitos: CNES; fim do período pela data viva.
+- Vacinação: % de casos com vacina COVID ou gripe entre os com resposta válida; excl. ignorados.
 """
 
 
@@ -243,7 +248,7 @@ def _build_integration_rules(
     rules = "3. INTEGRAÇÃO:\n"
 
     if include_metrics:
-        rules += """   - Interprete os dados das métricas e explique o que significam
+        rules += """   - Interprete os dados das métricas e explique o que significam; ao explicar cada métrica, mencione brevemente como é calculada (use o bloco "Como são calculadas" do contexto)
    - SEMPRE mencione o período analisado nas explicações (e.g., "nos últimos 12 meses", "no período de 7 dias", "nos últimos 30 dias")
    - NUNCA mencione o formato de data (YYYY-MM-DD) explicitamente - apenas use datas naturalmente
    - Se a data máxima dos dados (period_end) for anterior à data de hoje, SEMPRE explique que isso ocorre porque os dados são atualizados semanalmente pelas fontes e oriente o usuário a clicar no botão de atualização para verificar se há dados mais recentes disponíveis

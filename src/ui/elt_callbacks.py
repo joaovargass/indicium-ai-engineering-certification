@@ -8,7 +8,7 @@ from common.config import SPINNER_CLASS_HIDDEN, SPINNER_CLASS_VISIBLE
 from elt.errors import ELTError
 from elt.pipeline import run_incremental_elt
 from ui.state import get_elt_running_status, set_elt_running_status
-from ui.utils import format_extraction_date, load_extraction_date
+from ui.utils import build_extraction_and_vivo_children, format_extraction_date, load_extraction_date
 
 
 def register_elt_callbacks(app: dash.Dash) -> None:
@@ -30,8 +30,8 @@ def _register_load_date_interval_callback(app: dash.Dash) -> None:
         Input("load-date-interval", "n_intervals"),
         prevent_initial_call=True,
     )
-    def _on_load_date_interval(n: int) -> tuple[str, bool]:
-        return load_extraction_date(), True
+    def _on_load_date_interval(n: int) -> tuple[list, bool]:
+        return build_extraction_and_vivo_children(load_extraction_date()), True
 
 
 def _register_start_pipeline_callback(app: dash.Dash) -> None:
@@ -99,6 +99,8 @@ def _register_button_state_callback(app: dash.Dash) -> None:
                     return False, SPINNER_CLASS_HIDDEN, "Atualizar Dados", True
                 except Exception:
                     return False, SPINNER_CLASS_HIDDEN, "Atualizar Dados", True
+            if triggered_id == "update-data-button.n_clicks" and (_n_clicks or 0) >= 1:
+                return True, SPINNER_CLASS_VISIBLE, "Atualizando...", False
 
         try:
             server_running = get_elt_running_status()
@@ -125,7 +127,7 @@ def _register_date_update_callback(app: dash.Dash) -> None:
         Input("elt-pipeline-status", "data"),
         prevent_initial_call=True,
     )
-    def update_extraction_date(status_data: dict | None) -> str:
+    def update_extraction_date(status_data: dict | None) -> list:
         if not status_data:
             raise PreventUpdate
 
@@ -133,12 +135,10 @@ def _register_date_update_callback(app: dash.Dash) -> None:
         if not result:
             raise PreventUpdate
 
-        # Show error in UI instead of hiding it
         if result.startswith("Erro"):
-            return result
+            return build_extraction_and_vivo_children(result)
 
-        # Success: format the extraction date
-        return format_extraction_date(result)
+        return build_extraction_and_vivo_children(format_extraction_date(result))
 
 
 def _run_elt() -> str:

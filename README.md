@@ -518,7 +518,7 @@ The codebase follows clean code principles with modular organization, single-res
 ### Data Sources
 
 - **Primary**: OpenDataSUS SRAG Dataset (2023-2025)
-- **ICU Beds**: CNES API (with local caching)
+- **ICU occupancy**: OpenDataSUS (SRAG) for patient-days, CNES for beds (cached)
 - **News**: Tavily API (optional, for context in reports)
 
 ### Storage

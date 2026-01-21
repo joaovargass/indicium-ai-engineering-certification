@@ -138,15 +138,23 @@ def _fetch_from_api(year: int | None = None) -> dict | None:
         return None
 
 
-def get_icu_beds_data(force_refresh: bool = False) -> dict:
+def get_icu_beds_data(
+    force_refresh: bool = False,
+    reference_year: int | None = None,
+) -> dict:
     """
     Get ICU bed data by state.
 
     Uses cache if available and valid, otherwise fetches from CNES API.
     Falls back to static data if API unavailable.
+    When reference_year is given, uses Leitos_{year}.csv aligned to that year
+    (e.g. from the latest date in the ELT dataset).
 
     Args:
         force_refresh: If True, bypasses cache and fetches fresh data.
+        reference_year: Year to choose Leitos_{year}.csv. If None, uses current year.
+            Capped to datetime.now().year. If given, cache is used only when
+            cached competency year matches.
 
     Returns:
         Dictionary with:
@@ -157,18 +165,32 @@ def get_icu_beds_data(force_refresh: bool = False) -> dict:
         - source: "cache", "cnes_api", or "fallback"
 
     """
+    now_year = datetime.now().year
+    year = (
+        min(reference_year, now_year) if reference_year is not None else now_year
+    )
+
     if not force_refresh:
         cache = _load_cache()
         if cache:
-            cache["source"] = "cache"
-            return cache
+            if reference_year is not None:
+                comp = cache.get("competency") or 0
+                if (comp // 100) != reference_year:
+                    cache = None
+            if cache:
+                cache["source"] = "cache"
+                return cache
 
-    api_data = _fetch_from_api()
+    api_data = _fetch_from_api(year=year)
+    if not api_data:
+        prev = year - 1
+        logger.info(f"Leitos_{year} failed, trying Leitos_{prev}")
+        api_data = _fetch_from_api(year=prev)
+
     if api_data:
         _save_cache(api_data)
         return api_data
 
-    # Fallback to static data
     return {
         "competency": 202412,
         "icu_beds_by_uf": FALLBACK_ICU_BEDS.copy(),
@@ -181,6 +203,7 @@ def get_icu_beds_data(force_refresh: bool = False) -> dict:
 def get_location_icu_beds(
     uf: str | None = None,
     city_code: str | None = None,
+    reference_year: int | None = None,
 ) -> tuple[int | None, str]:
     """
     Get ICU bed count for a specific location.
@@ -188,13 +211,14 @@ def get_location_icu_beds(
     Args:
         uf: State code (e.g., "SP", "RJ") or None for Brazil total.
         city_code: IBGE city code (6 digits). Converts to city name for lookup.
+        reference_year: Year for Leitos_{year}.csv (e.g. from dataset max date). If None, uses current year.
 
     Returns:
         Tuple of (bed_count, source_description).
         bed_count is None if location not found.
 
     """
-    data = get_icu_beds_data()
+    data = get_icu_beds_data(reference_year=reference_year)
     source = f"CNES {data.get('competency', 'N/A')} ({data.get('source', 'unknown')})"
 
     if city_code:
